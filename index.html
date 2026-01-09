@@ -113,7 +113,12 @@
   </div>
 
 <script>
-const SPOT_API = "https://metals-proxy.analysisswim.workers.dev/spot";
+  
+console.log("SPOT API:", SPOT_API);
+ fetch(`${SPOT_API}?symbol=XAUUSD`).then(r => r.text()).then(console.log);
+
+  
+  const SPOT_API = "https://metals-proxy.analysisswim.workers.dev/spot";
 
 async function fetchSpot(symbol){
   const r = await fetch(`${SPOT_API}?symbol=${encodeURIComponent(symbol)}`);
