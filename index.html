@@ -126,7 +126,7 @@ async function fetchSpot(symbol){
     const first = data[0] || {};
     return first.gold ?? first.silver ?? null;
   }
-  return data.gold ?? data.silver ?? data.price ?? null;
+  return data.price ?? null;
 }
 
 function fmtUSD(v){
