@@ -119,15 +119,9 @@ async function fetchSpot(symbol){
   const r = await fetch(`${SPOT_API}?symbol=${encodeURIComponent(symbol)}`);
   if(!r.ok) throw new Error("SPOT_API HTTP " + r.status);
   const data = await r.json();
-
-  // metals.live обычно возвращает массив вида: [{"gold": 2660.12}] или [{"silver": 30.45}]
-  // но на всякий случай поддержим оба формата (объект/массив)
-  if (Array.isArray(data)) {
-    const first = data[0] || {};
-    return first.gold ?? first.silver ?? null;
-  }
   return data.price ?? null;
 }
+
 
 function fmtUSD(v){
   return "$" + Number(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
