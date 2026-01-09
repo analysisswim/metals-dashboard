@@ -115,13 +115,14 @@
 <script>
 const SPOT_API = "https://metals-proxy.analysisswim.workers.dev/api/spot";
 
-console.log("SPOT API:", SPOT_API);
+function fmtUSD(v){
+  return "$" + Number(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+}
 
 async function fetchSpot(symbol){
-  const r = await fetch(`${SPOT_API}?symbol=${encodeURIComponent(symbol)}`);
+  const r = await fetch(`${SPOT_API}?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" });
   if(!r.ok) throw new Error("SPOT_API HTTP " + r.status);
 
-  // на случай если опять вернётся HTML — покажем текст ошибки в консоли
   const ct = r.headers.get("content-type") || "";
   if(!ct.includes("application/json")){
     const raw = await r.text();
@@ -132,6 +133,48 @@ async function fetchSpot(symbol){
   const data = await r.json();
   return data.price ?? null;
 }
+
+async function refresh(){
+  const body = document.getElementById("spotBody");
+  body.innerHTML = `<tr><td colspan="4"><span class="chip na">обновляю…</span></td></tr>`;
+
+  try{
+    const [gold, silver] = await Promise.all([
+      fetchSpot("XAUUSD"),
+      fetchSpot("XAGUSD"),
+    ]);
+
+    const rows = [
+      {name:"Золото (spot)", t:"XAUUSD", price: gold, src:"metals-proxy (Worker)"},
+      {name:"Серебро (spot)", t:"XAGUSD", price: silver, src:"metals-proxy (Worker)"},
+    ];
+
+    body.innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.name}</td>
+        <td class="mono">${r.t}</td>
+        <td class="mono">${r.price ? fmtUSD(r.price) : "—"}</td>
+        <td class="small">${r.src}</td>
+      </tr>
+    `).join("");
+
+    document.getElementById("ts").textContent = new Date().toLocaleString();
+  } catch(e){
+    console.error(e);
+    body.innerHTML = `<tr><td colspan="4"><span class="chip na">не удалось загрузить spot (проверь Worker / Access)</span></td></tr>`;
+  }
+}
+
+let timer = null;
+function start(intervalMs = 60000){
+  if (timer) clearInterval(timer);
+  refresh();
+  timer = setInterval(refresh, intervalMs);
+}
+
+document.getElementById("refreshBtn").addEventListener("click", refresh);
+start(60000);
 </script>
+
 </body>
 </html>
