@@ -6,7 +6,7 @@
   <title>Металлы/токены — график + сигналы (MA/RSI/ATR)</title>
   <style>
     :root{
-      --bg:#0b1220; --card:#121a2b; --text:#e7eefc; --muted:#a8b3cf;
+      --bg:#0b1220; --text:#e7eefc; --muted:#a8b3cf;
       --line:rgba(255,255,255,.08); --btn:#1b2540;
       --ok:#3bd671; --bad:#ff6b6b; --warn:#ffd166;
     }
@@ -17,11 +17,8 @@
     .sub{color:var(--muted);font-size:13px;margin:0 0 14px;line-height:1.35}
     .grid{display:grid;grid-template-columns: 1.4fr .8fr; gap:14px}
     @media(max-width:980px){.grid{grid-template-columns:1fr}}
-    .card{
-      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
-      border:1px solid var(--line); border-radius:16px; padding:14px;
-      box-shadow:0 12px 40px rgba(0,0,0,.35)
-    }
+    .card{background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow:0 12px 40px rgba(0,0,0,.35)}
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     .row.space{justify-content:space-between}
     label{font-size:12px;color:var(--muted);display:block;margin:0 0 6px}
@@ -56,7 +53,6 @@
   </p>
 
   <div class="grid">
-    <!-- LEFT -->
     <div class="card">
       <div class="row space">
         <div class="row">
@@ -105,7 +101,6 @@
       </p>
     </div>
 
-    <!-- RIGHT -->
     <div class="card">
       <div class="box" style="margin-bottom:12px">
         <div class="row space">
@@ -161,7 +156,6 @@
 </div>
 
 <script>
-/** ===== Helpers ===== **/
 const $ = (id)=>document.getElementById(id);
 const num = (v, d=2)=> (v==null || !isFinite(v)) ? "—" : Number(v).toFixed(d);
 
@@ -170,29 +164,23 @@ function setState(msg, cls=""){
   el.className = "small " + cls;
   el.textContent = msg;
 }
+function tsToStr(ms){ return new Date(ms).toLocaleString(); }
 
-function tsToStr(ms){
-  return new Date(ms).toLocaleString();
-}
-
-/** ===== API endpoints (твой Worker) ===== **/
+// ==== твой API Worker домен ====
 const API_BASE = "https://api-metals.analysisswim.workers.dev";
-const SPOT_API  = `${API_BASE}/api/spot`;
-const KLINES_API = `${API_BASE}/api/klines`;
 
-/** ===== Spot ===== **/
+// ===== Spot =====
 async function fetchSpot(symbol){
-  const r = await fetch(`${SPOT_API}?symbol=${encodeURIComponent(symbol)}`, { cache:"no-store" });
+  const r = await fetch(`${API_BASE}/api/spot?symbol=${encodeURIComponent(symbol)}`, { cache:"no-store" });
   const ct = (r.headers.get("content-type") || "");
   if (!ct.includes("application/json")) {
     const raw = await r.text();
     throw new Error("Spot not JSON: " + raw.slice(0,120));
   }
   const data = await r.json();
-  if (!data?.ok || data?.price == null) throw new Error("Spot bad payload");
-  return data; // {ok, symbol, price, currency, ts, source}
+  if (data?.price == null) throw new Error("Spot missing price");
+  return data;
 }
-
 async function refreshSpot(){
   $("spotXAU").textContent = "—";
   $("spotXAG").textContent = "—";
@@ -203,28 +191,35 @@ async function refreshSpot(){
     $("spotXAG").textContent = num(xag.price, 3) + " USD";
     $("spotSrc").textContent = xau.source || "—";
   }catch(e){
-    $("spotSrc").textContent = "ошибка (см. console)";
+    $("spotSrc").textContent = "ошибка (см. состояние/console)";
+    setState("Spot ошибка: " + e.message, "status-bad");
     console.error(e);
   }
 }
 
-/** ===== Klines (CoinGecko inside Worker) ===== **/
-async function fetchKlines(coinId, vs="usd", days=30, interval="1h", limit=200){
-  const url = `${KLINES_API}?market=coingecko&coin=${encodeURIComponent(coinId)}&vs=${encodeURIComponent(vs)}&days=${encodeURIComponent(days)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`;
+// ===== Klines через Worker (CoinGecko внутри) =====
+async function fetchKlines(coinId, vs="usd", days=30, limit=200){
+  const url =
+    `${API_BASE}/api/klines?market=coingecko` +
+    `&coin=${encodeURIComponent(coinId)}` +
+    `&vs=${encodeURIComponent(vs)}` +
+    `&days=${encodeURIComponent(days)}` +
+    `&limit=${encodeURIComponent(limit)}`;
+
   const r = await fetch(url, { cache:"no-store" });
   const ct = (r.headers.get("content-type") || "");
-  if (!ct.includes("application/json")) {
+  if(!ct.includes("application/json")){
     const raw = await r.text();
-    throw new Error("Klines not JSON: " + raw.slice(0,160));
+    throw new Error("Bad klines (not JSON): " + raw.slice(0,160));
   }
-  const j = await r.json();
-  if (!j?.ok || !Array.isArray(j?.candles) || j.candles.length === 0) {
+  const data = await r.json();
+  if(!Array.isArray(data) || data.length===0 || !Array.isArray(data[0])){
     throw new Error("Bad klines payload");
   }
-  return j.candles; // [[t,o,h,l,c], ...]
+  return data; // [[ts,o,h,l,c],...]
 }
 
-/** ===== Indicators ===== **/
+// ===== Indicators =====
 function SMA(values, period){
   const out = Array(values.length).fill(null);
   let sum = 0;
@@ -235,7 +230,6 @@ function SMA(values, period){
   }
   return out;
 }
-
 function RSI(closes, period){
   const out = Array(closes.length).fill(null);
   let gains=0, losses=0;
@@ -255,19 +249,17 @@ function RSI(closes, period){
   }
   return out;
 }
-
 function ATR(ohlc, period){
   const out = Array(ohlc.length).fill(null);
   const tr = Array(ohlc.length).fill(null);
   for(let i=0;i<ohlc.length;i++){
-    const [, o,h,l,c] = ohlc[i];
+    const [, ,h,l,] = ohlc[i];
     if(i===0){ tr[i]=h-l; continue; }
     const prevClose = ohlc[i-1][4];
     tr[i] = Math.max(h-l, Math.abs(h-prevClose), Math.abs(l-prevClose));
   }
   let sum=0;
   for(let i=0;i<ohlc.length;i++){
-    if(tr[i]==null) continue;
     sum += tr[i];
     if(i>=period) sum -= tr[i-period];
     if(i>=period-1) out[i]=sum/period;
@@ -275,7 +267,7 @@ function ATR(ohlc, period){
   return out;
 }
 
-/** ===== Chart ===== **/
+// ===== Chart =====
 function drawChart(canvas, candles, maF, maS){
   const ctx = canvas.getContext("2d");
   const w = canvas.width, h = canvas.height;
@@ -307,14 +299,14 @@ function drawChart(canvas, candles, maF, maS){
   ctx.lineWidth=1.5;
   ctx.beginPath();
   let startedF=false;
-  maF.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!startedF){ctx.moveTo(xx,yy);startedF=true}else ctx.lineTo(xx,yy); });
+  maF.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!startedF){ctx.moveTo(xx,yy); startedF=true;} else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
   ctx.strokeStyle="rgba(255,107,107,.9)";
   ctx.lineWidth=1.5;
   ctx.beginPath();
   let startedS=false;
-  maS.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!startedS){ctx.moveTo(xx,yy);startedS=true}else ctx.lineTo(xx,yy); });
+  maS.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!startedS){ctx.moveTo(xx,yy); startedS=true;} else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
   ctx.fillStyle="rgba(168,179,207,1)";
@@ -323,9 +315,9 @@ function drawChart(canvas, candles, maF, maS){
   ctx.fillText(num(min,2), 8, padT+plotH);
 }
 
-/** ===== Main flow ===== **/
+// ===== Main =====
 async function loadAll(){
-  setState("Загружаю свечи…", "status-warn");
+  setState("Загружаю klines через Worker…", "status-warn");
   $("rows").innerHTML = `<tr><td colspan="6" class="small">загрузка…</td></tr>`;
 
   const coinId = $("asset").value;
@@ -342,7 +334,7 @@ async function loadAll(){
   const tpX = Number($("tpX").value||3);
 
   try{
-    const ohlc = await fetchKlines(coinId, "usd", days, "1h", limit);
+    const ohlc = await fetchKlines(coinId, "usd", days, limit);
 
     const closes = ohlc.map(x=>x[4]);
     const maF = SMA(closes, maFast);
@@ -352,7 +344,6 @@ async function loadAll(){
 
     const lastIdx = ohlc.length-1;
     const lastClose = closes[lastIdx];
-
     $("last").textContent = num(lastClose,2) + " USD";
     $("ts").textContent = new Date().toLocaleString();
 
@@ -397,10 +388,10 @@ async function loadAll(){
     $("rows").innerHTML = rows.join("");
 
     drawChart($("chart"), ohlc, maF, maS);
-    setState("OK: свечи загружены через Worker (CoinGecko)", "status-ok");
+    setState("OK: klines загружены через Worker (CoinGecko внутри)", "status-ok");
   }catch(e){
     console.error(e);
-    setState("Ошибка: " + e.message, "status-bad");
+    setState("Ошибка загрузки: " + e.message, "status-bad");
     $("signal").textContent = "—";
     $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
   }
