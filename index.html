@@ -338,7 +338,7 @@ async function loadAll(){
   const tpX = Number($("tpX").value||3);
 
   try{
-    const ohlc = await fetchKlines(coinId, "usd", days, limit);
+    const ohlc = await fetchKlines(coinId, days, limit);
 
     const closes = ohlc.map(x=>x[4]);
     const maF = SMA(closes, maFast);
