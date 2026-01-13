@@ -3,193 +3,487 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Metals Dashboard — Chart + Signals</title>
+  <title>Металлы/токены — график + сигналы (MA/RSI/ATR)</title>
   <style>
-    :root{--bg:#0b1220;--card:#121a2b;--text:#e7eefc;--muted:#a8b3cf;--up:#3bd671;--down:#ff6b6b;}
+    :root{
+      --bg:#0b1220;--card:#121a2b;--card2:#0f1729;--text:#e7eefc;--muted:#a8b3cf;
+      --line:rgba(255,255,255,.07);--btn:#1b2540;--btn2:#233057;
+      --good:#3bd671;--bad:#ff6b6b;--warn:#f7c948;
+      --radius:16px;
+    }
     html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
-    .wrap{max-width:1250px;margin:18px auto;padding:0 14px}
+    .wrap{max-width:1200px;margin:22px auto;padding:0 14px}
     h1{font-size:18px;margin:0 0 6px}
-    .sub{color:var(--muted);font-size:12.5px;margin:0 0 14px;line-height:1.45}
+    .sub{color:var(--muted);font-size:13px;margin:0 0 14px;line-height:1.4}
     .grid{display:grid;grid-template-columns:1fr;gap:14px}
-    @media(min-width:980px){.grid{grid-template-columns: 1.45fr 0.55fr;}}
-    .card{background:var(--card);border-radius:14px;padding:12px}
-    .row{display:flex;gap:10px;align-items:end;justify-content:space-between;flex-wrap:wrap}
-    label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
-    select,input,button{background:#1b2540;color:var(--text);border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:8px 10px;font-size:14px}
-    button{cursor:pointer}
-    .kv{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
-    .box{border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px}
+    @media(min-width:980px){.grid{grid-template-columns: 1.35fr .65fr;}}
+    .card{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+    label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
+    select,input{background:#0e1628;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px 10px;font-size:14px;outline:none}
+    select{min-width:180px}
+    input{width:120px}
+    .btn{background:var(--btn);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:10px 12px;font-size:14px;cursor:pointer}
+    .btn:hover{background:var(--btn2)}
     .small{font-size:12px;color:var(--muted)}
-    .ok{color:var(--up)} .bad{color:var(--down)}
-    #chart{height:540px}
-    .list{margin:8px 0 0;padding:0;list-style:none;max-height:310px;overflow:auto}
-    .list li{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px}
-    .list li:last-child{border-bottom:0}
-    .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;margin-left:8px}
-    .buy{background:rgba(59,214,113,.15);color:var(--up)}
-    .sell{background:rgba(255,107,107,.15);color:var(--down)}
+    .pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px}
+    .good{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .box{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:14px;padding:12px}
+    .box h3{margin:0 0 10px;font-size:13px;color:#c7d2f0}
+    .sig{font-size:14px;line-height:1.35}
+    canvas{width:100%;height:420px;display:block;background:rgba(0,0,0,.12);border:1px solid var(--line);border-radius:14px}
+    .list{max-height:210px;overflow:auto;border-radius:14px;border:1px solid var(--line)}
+    .list table{width:100%;border-collapse:collapse}
+    .list th,.list td{padding:10px 10px;border-bottom:1px solid var(--line);font-size:13px;text-align:left}
+    .list th{color:#c7d2f0;font-weight:600;background:rgba(255,255,255,.03);position:sticky;top:0}
+    .list tr:last-child td{border-bottom:0}
     .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
   </style>
-
-  <!-- Lightweight Charts -->
-  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 <div class="wrap">
   <h1>Металлы/токены — график + сигналы (MA/RSI/ATR)</h1>
   <p class="sub">
-    Данные берём через твой Cloudflare Worker (spot) и, если доступно, свечи (klines). Если klines ещё нет — график возьмётся с CoinGecko автоматически.
-    Это инструмент для анализа, не финсовет.
+    Spot берём через твой Cloudflare Worker (<span class="mono">/api/spot</span>). Для свечей используем CoinGecko OHLC.
+    Это инструмент для анализа, не финансовый совет.
   </p>
 
   <div class="grid">
     <div class="card">
-      <div class="row">
-        <div class="row" style="gap:10px;align-items:end">
-          <label>
-            Актив (график)
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="row">
+          <div>
+            <label>Актив (график)</label>
             <select id="asset">
-              <option value="XAUTUSDT|tether-gold|XAUt (Tether Gold)">XAUt (Tether Gold)</option>
-              <option value="BTCUSDT|bitcoin|BTC (test)">BTC (test)</option>
-              <option value="ETHUSDT|ethereum|ETH (test)">ETH (test)</option>
+              <option value="tether-gold|XAUT">XAUt (Tether Gold)</option>
+              <option value="pax-gold|PAXG">PAXG (Pax Gold)</option>
+              <!-- если XAGX нет/другой id — впиши свой -->
+              <option value="kinesis-silver|KAG">Kinesis Silver (пример)</option>
+              <option value="CUSTOM|CUSTOM">Custom (ввести CoinGecko id)</option>
             </select>
-          </label>
-
-          <label>
-            Источник свечей
-            <select id="source">
-              <option value="worker" selected>Worker (/api/klines) — если есть</option>
-              <option value="coingecko">CoinGecko (fallback)</option>
+          </div>
+          <div>
+            <label>CoinGecko id (если Custom)</label>
+            <input id="customId" placeholder="например: tether-gold" />
+          </div>
+          <div>
+            <label>Таймфрейм (days)</label>
+            <select id="days">
+              <option value="1">1 день</option>
+              <option value="7">7 дней</option>
+              <option value="30" selected>30 дней</option>
+              <option value="90">90 дней</option>
+              <option value="180">180 дней</option>
+              <option value="365">365 дней</option>
             </select>
-          </label>
-
-          <label>
-            Таймфрейм
-            <select id="tf">
-              <option value="15m">15m</option>
-              <option value="1h" selected>1h</option>
-              <option value="4h">4h</option>
-              <option value="1d">1d</option>
-            </select>
-          </label>
-
-          <label>
-            Глубина (баров)
+          </div>
+          <div>
+            <label>Глубина (баров)</label>
             <select id="limit">
-              <option value="200">200</option>
-              <option value="500" selected>500</option>
-              <option value="1000">1000</option>
+              <option>100</option>
+              <option selected>200</option>
+              <option>300</option>
+              <option>500</option>
             </select>
-          </label>
-
-          <label>
-            Валюта (для CoinGecko)
-            <select id="vs">
-              <option value="usd" selected>USD</option>
-              <option value="sgd">SGD</option>
-            </select>
-          </label>
+          </div>
         </div>
-
-        <div class="row" style="gap:8px;align-items:end">
-          <button id="loadBtn">Загрузить</button>
-          <button id="resetBtn">Сброс</button>
-          <span class="small">Обновлено: <span id="ts">—</span></span>
+        <div class="row" style="gap:8px">
+          <button class="btn" id="loadBtn">Загрузить</button>
+          <button class="btn" id="resetBtn">Сброс</button>
         </div>
       </div>
 
-      <div id="chart" style="margin-top:12px"></div>
-      <div class="small" style="margin-top:10px">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <div class="small">Обновлено: <span id="ts">—</span></div>
+        <div class="small">Последняя цена (из свечей): <span class="mono" id="lastPrice">—</span></div>
+      </div>
+
+      <canvas id="chart" width="1200" height="420"></canvas>
+      <div class="small" style="margin-top:8px">
         BUY: MAfast пересекает MAslow вверх и RSI &lt; buyRSI. SELL: пересечение вниз и RSI &gt; sellRSI. Stop/TP = ATR×множители.
       </div>
     </div>
 
     <div class="card">
+      <div class="box" style="margin-bottom:10px">
+        <h3>Spot (через Worker)</h3>
+        <div class="small mono">XAUUSD: <span id="spotXAU">—</span> • XAGUSD: <span id="spotXAG">—</span></div>
+        <div class="small">Источник: <span id="spotSrc">—</span></div>
+        <div style="margin-top:10px"><button class="btn" id="spotBtn">Обновить spot</button></div>
+      </div>
+
+      <div class="box" style="margin-bottom:10px">
+        <h3>Параметры стратегии</h3>
+        <div class="split">
+          <div>
+            <label>MA fast</label>
+            <input id="maFast" value="9" />
+          </div>
+          <div>
+            <label>MA slow</label>
+            <input id="maSlow" value="21" />
+          </div>
+          <div>
+            <label>RSI period</label>
+            <input id="rsiPeriod" value="14" />
+          </div>
+          <div>
+            <label>ATR period</label>
+            <input id="atrPeriod" value="14" />
+          </div>
+          <div>
+            <label>BUY RSI &lt;</label>
+            <input id="buyRsi" value="55" />
+          </div>
+          <div>
+            <label>SELL RSI &gt;</label>
+            <input id="sellRsi" value="65" />
+          </div>
+          <div>
+            <label>Stop ATR ×</label>
+            <input id="stopAtr" value="2" />
+          </div>
+          <div>
+            <label>TP ATR ×</label>
+            <input id="tpAtr" value="3" />
+          </div>
+        </div>
+      </div>
+
+      <div class="box" style="margin-bottom:10px">
+        <h3>Сигналы</h3>
+        <div class="sig" id="signalText">—</div>
+      </div>
+
       <div class="box">
-        <b>Spot (через Worker)</b>
-        <div class="small" style="margin-top:6px">
-          XAUUSD: <span class="mono" id="spotXAU">—</span> • XAGUSD: <span class="mono" id="spotXAG">—</span>
-          <div class="small">Источник: <span id="spotSrc">—</span></div>
-        </div>
-        <button id="spotBtn" style="margin-top:10px">Обновить spot</button>
-      </div>
-
-      <div class="box" style="margin-top:10px">
-        <b>Параметры стратегии</b>
-        <div class="kv">
-          <label>MA fast <input id="maFast" type="number" value="9" min="2" step="1"></label>
-          <label>MA slow <input id="maSlow" type="number" value="21" min="3" step="1"></label>
-          <label>RSI period <input id="rsiLen" type="number" value="14" min="5" step="1"></label>
-          <label>ATR period <input id="atrLen" type="number" value="14" min="5" step="1"></label>
-          <label>BUY RSI &lt; <input id="buyRsi" type="number" value="55" min="10" max="90" step="1"></label>
-          <label>SELL RSI &gt; <input id="sellRsi" type="number" value="65" min="10" max="90" step="1"></label>
-          <label>Stop ATR × <input id="atrStop" type="number" value="2" min="0.5" step="0.5"></label>
-          <label>TP ATR × <input id="atrTp" type="number" value="3" min="0.5" step="0.5"></label>
+        <h3>Последние бары (индикаторы)</h3>
+        <div class="list">
+          <table>
+            <thead>
+              <tr>
+                <th>Время</th><th>Close</th><th>MAf</th><th>MAs</th><th>RSI</th><th>ATR</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
         </div>
       </div>
 
-      <div class="box" style="margin-top:10px">
-        <div class="row" style="align-items:center">
-          <b>Сигналы</b>
-          <span class="small">Всего: <span id="sigCount">—</span></span>
-        </div>
-        <ul class="list" id="signals"></ul>
-      </div>
-
-      <div class="box" style="margin-top:10px">
-        <b>Состояние</b>
-        <div class="small" id="state" style="margin-top:8px">—</div>
-      </div>
     </div>
   </div>
 </div>
 
 <script>
-/** =============================
- *  НАСТРОЙКА: твой Worker URL
- *  ============================= */
-const WORKER_BASE = "https://metals-proxy.analysisswim.workers.dev"; // ← твой
-const SPOT_ENDPOINT = `${WORKER_BASE}/api/spot`;
+/** ====== Настройки API ====== **/
+const SPOT_API = "https://metals-proxy.analysisswim.workers.dev/api/spot"; // твой Worker
 
-/** =============================
- *  УТИЛИТЫ
- *  ============================= */
-function fmtTime(ms){
-  const d = new Date(ms);
-  return d.toLocaleString("ru-RU", { hour12:false });
+/** ====== Вспомогательные ====== **/
+const $ = (id)=>document.getElementById(id);
+const num = (v, d=2)=> (v==null||Number.isNaN(v)) ? "—" : Number(v).toFixed(d);
+const toInt = (v, def)=> {
+  const n = parseInt(String(v),10);
+  return Number.isFinite(n) ? n : def;
+};
+const toFloat = (v, def)=> {
+  const n = parseFloat(String(v));
+  return Number.isFinite(n) ? n : def;
+};
+
+function fmtTime(ts){
+  const d = new Date(ts);
+  return d.toLocaleString();
 }
-function setState(html){ document.getElementById("state").innerHTML = html; }
-function setTS(){ document.getElementById("ts").textContent = new Date().toLocaleString("ru-RU", {hour12:false}); }
-function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
 
-/** =============================
- *  ИНДИКАТОРЫ
- *  ============================= */
-function sma(values, length){
+/** ====== Индикаторы ====== **/
+function sma(values, period){
   const out = Array(values.length).fill(null);
   let sum = 0;
   for(let i=0;i<values.length;i++){
     sum += values[i];
-    if(i>=length) sum -= values[i-length];
-    if(i>=length-1) out[i] = sum/length;
+    if(i>=period) sum -= values[i-period];
+    if(i>=period-1) out[i] = sum/period;
   }
   return out;
 }
-function rsi(values, length){
-  const out = Array(values.length).fill(null);
-  if(values.length <= length) return out;
 
-  let gain = 0, loss = 0;
-  for(let i=1;i<=length;i++){
-    const ch = values[i] - values[i-1];
+function rsi(closes, period){
+  const out = Array(closes.length).fill(null);
+  let gain=0, loss=0;
+
+  for(let i=1;i<=period;i++){
+    const ch = closes[i]-closes[i-1];
     if(ch>=0) gain += ch; else loss -= ch;
   }
-  gain /= length; loss /= length;
-  out[length] = loss === 0 ? 100 : 100 - (100/(1 + gain/loss));
+  let avgGain = gain/period;
+  let avgLoss = loss/period;
+  out[period] = avgLoss===0 ? 100 : 100 - (100/(1+(avgGain/avgLoss)));
 
-  for(let i=length+1;i<values.length;i++){
-    const ch = values[i]-values[i-1];
+  for(let i=period+1;i<closes.length;i++){
+    const ch = closes[i]-closes[i-1];
     const g = ch>0 ? ch : 0;
     const l = ch<0 ? -ch : 0;
-    gain = (gain*(length-1) + g)/length;
-    loss = (loss*(length-1) + l
+    avgGain = (avgGain*(period-1)+g)/period;
+    avgLoss = (avgLoss*(period-1)+l)/period;
+    out[i] = avgLoss===0 ? 100 : 100 - (100/(1+(avgGain/avgLoss)));
+  }
+  return out;
+}
+
+function atr(highs, lows, closes, period){
+  const tr = Array(closes.length).fill(null);
+  for(let i=1;i<closes.length;i++){
+    const h = highs[i], l = lows[i], pc = closes[i-1];
+    tr[i] = Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc));
+  }
+
+  const out = Array(closes.length).fill(null);
+  // first ATR = SMA(TR, period) at i=period
+  let sum=0;
+  for(let i=1;i<=period;i++) sum += tr[i];
+  out[period] = sum/period;
+
+  for(let i=period+1;i<closes.length;i++){
+    out[i] = (out[i-1]*(period-1) + tr[i]) / period;
+  }
+  return out;
+}
+
+/** ====== Данные OHLC с CoinGecko ======
+ *  endpoint: /coins/{id}/ohlc?vs_currency=usd&days=30
+ *  returns: [ [timestamp, open, high, low, close], ... ]
+ */
+async function fetchOHLC(coinId, days){
+  const url = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(coinId)}/ohlc?vs_currency=usd&days=${encodeURIComponent(days)}`;
+  const r = await fetch(url, {cache:"no-store"});
+  if(!r.ok) throw new Error("CoinGecko HTTP "+r.status);
+  const arr = await r.json();
+  if(!Array.isArray(arr) || arr.length===0) throw new Error("CoinGecko empty");
+  return arr.map(x=>({t:x[0], o:x[1], h:x[2], l:x[3], c:x[4]}));
+}
+
+/** ====== Spot через Worker ====== **/
+async function fetchSpot(symbol){
+  const r = await fetch(`${SPOT_API}?symbol=${encodeURIComponent(symbol)}`, {cache:"no-store"});
+  const ct = (r.headers.get("content-type")||"");
+  if(!ct.includes("application/json")){
+    const raw = await r.text();
+    throw new Error("Spot not JSON: "+raw.slice(0,120));
+  }
+  const data = await r.json();
+  if(data?.price==null) throw new Error("Spot missing price");
+  return data;
+}
+
+async function refreshSpot(){
+  $("spotXAU").textContent = "—";
+  $("spotXAG").textContent = "—";
+  $("spotSrc").textContent = "—";
+  try{
+    const [xau,xag] = await Promise.all([fetchSpot("XAUUSD"), fetchSpot("XAGUSD")]);
+    $("spotXAU").textContent = num(xau.price, 2) + " USD";
+    $("spotXAG").textContent = num(xag.price, 3) + " USD";
+    $("spotSrc").textContent = xau.source || "—";
+  }catch(e){
+    $("spotSrc").textContent = "ошибка (см. console)";
+    console.error(e);
+  }
+}
+
+/** ====== Рисование (простое) ====== **/
+function drawChart(canvas, candles, maF, maS){
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // рамка
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = "rgba(255,255,255,.10)";
+  ctx.strokeRect(0.5,0.5,W-1,H-1);
+
+  const closes = candles.map(x=>x.c);
+  const highs  = candles.map(x=>x.h);
+  const lows   = candles.map(x=>x.l);
+
+  const max = Math.max(...highs);
+  const min = Math.min(...lows);
+  const padY = (max-min)*0.08;
+  const top = max+padY, bot = min-padY;
+
+  const xStep = W / (candles.length-1);
+
+  const y = (p)=> H - ( (p-bot) / (top-bot) ) * H;
+
+  // линия close
+  ctx.beginPath();
+  for(let i=0;i<candles.length;i++){
+    const px = i*xStep;
+    const py = y(closes[i]);
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.strokeStyle = "rgba(231,238,252,.75)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // MA fast
+  ctx.beginPath();
+  let started=false;
+  for(let i=0;i<maF.length;i++){
+    if(maF[i]==null) continue;
+    const px=i*xStep, py=y(maF[i]);
+    if(!started){ctx.moveTo(px,py); started=true;} else ctx.lineTo(px,py);
+  }
+  ctx.strokeStyle = "rgba(59,214,113,.90)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // MA slow
+  ctx.beginPath();
+  started=false;
+  for(let i=0;i<maS.length;i++){
+    if(maS[i]==null) continue;
+    const px=i*xStep, py=y(maS[i]);
+    if(!started){ctx.moveTo(px,py); started=true;} else ctx.lineTo(px,py);
+  }
+  ctx.strokeStyle = "rgba(255,107,107,.85)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function detectSignal(candles, maF, maS, rsiArr, atrArr, buyRsi, sellRsi, stopMult, tpMult){
+  const i = candles.length-1;
+  const prev = i-1;
+
+  if(i<2) return {text:"Недостаточно данных", cls:"warn"};
+
+  const lastC = candles[i].c;
+  const lastRSI = rsiArr[i];
+  const lastATR = atrArr[i];
+
+  // пересечение
+  const crossUp = maF[prev]!=null && maS[prev]!=null && maF[i]!=null && maS[i]!=null
+    && maF[prev] <= maS[prev] && maF[i] > maS[i];
+
+  const crossDown = maF[prev]!=null && maS[prev]!=null && maF[i]!=null && maS[i]!=null
+    && maF[prev] >= maS[prev] && maF[i] < maS[i];
+
+  let signal = "NEUTRAL";
+  let cls = "warn";
+
+  if(crossUp && lastRSI!=null && lastRSI < buyRsi){
+    signal = "BUY";
+    cls = "good";
+  } else if(crossDown && lastRSI!=null && lastRSI > sellRsi){
+    signal = "SELL";
+    cls = "bad";
+  }
+
+  let extra = "";
+  if(lastATR!=null){
+    const stop = lastC - lastATR*stopMult;
+    const tp   = lastC + lastATR*tpMult;
+    extra = ` • Stop≈ ${num(stop,2)} • TP≈ ${num(tp,2)} (ATR=${num(lastATR,2)})`;
+  }
+
+  return {
+    text: `Сигнал: ${signal} • Close=${num(lastC,2)} • RSI=${lastRSI==null?"—":num(lastRSI,1)}${extra}`,
+    cls
+  };
+}
+
+function renderRows(candles, maF, maS, rsiArr, atrArr){
+  const tbody = $("rows");
+  const take = Math.min(30, candles.length);
+  let html = "";
+  for(let k=0;k<take;k++){
+    const i = candles.length-1-k;
+    const c = candles[i];
+    html += `<tr>
+      <td class="mono">${fmtTime(c.t)}</td>
+      <td class="mono">${num(c.c,2)}</td>
+      <td class="mono">${num(maF[i],2)}</td>
+      <td class="mono">${num(maS[i],2)}</td>
+      <td class="mono">${num(rsiArr[i],1)}</td>
+      <td class="mono">${num(atrArr[i],2)}</td>
+    </tr>`;
+  }
+  tbody.innerHTML = html || `<tr><td colspan="6" class="small">—</td></tr>`;
+}
+
+/** ====== Основная загрузка ====== **/
+async function load(){
+  $("signalText").textContent = "Загружаю…";
+  $("signalText").className = "sig warn";
+
+  const [id, sym] = $("asset").value.split("|");
+  const custom = $("customId").value.trim();
+  const coinId = (id==="CUSTOM") ? custom : id;
+  const days = $("days").value;
+  const limit = toInt($("limit").value, 200);
+
+  if(!coinId){
+    $("signalText").textContent = "Укажи CoinGecko id (поле Custom)";
+    return;
+  }
+
+  const maFast = toInt($("maFast").value, 9);
+  const maSlow = toInt($("maSlow").value, 21);
+  const rsiP   = toInt($("rsiPeriod").value, 14);
+  const atrP   = toInt($("atrPeriod").value, 14);
+  const buyRsi = toFloat($("buyRsi").value, 55);
+  const sellRsi= toFloat($("sellRsi").value, 65);
+  const stopM  = toFloat($("stopAtr").value, 2);
+  const tpM    = toFloat($("tpAtr").value, 3);
+
+  try{
+    let candles = await fetchOHLC(coinId, days);
+    // ограничим глубину
+    if(candles.length > limit) candles = candles.slice(candles.length - limit);
+
+    const closes = candles.map(x=>x.c);
+    const highs  = candles.map(x=>x.h);
+    const lows   = candles.map(x=>x.l);
+
+    const maF = sma(closes, maFast);
+    const maS = sma(closes, maSlow);
+    const rsiArr = rsi(closes, rsiP);
+    const atrArr = atr(highs, lows, closes, atrP);
+
+    $("ts").textContent = new Date().toLocaleString();
+    $("lastPrice").textContent = `${num(closes[closes.length-1], 2)} USD`;
+
+    drawChart($("chart"), candles, maF, maS);
+
+    const sig = detectSignal(candles, maF, maS, rsiArr, atrArr, buyRsi, sellRsi, stopM, tpM);
+    $("signalText").textContent = sig.text;
+    $("signalText").className = "sig " + sig.cls;
+
+    renderRows(candles, maF, maS, rsiArr, atrArr);
+  }catch(e){
+    console.error(e);
+    $("signalText").textContent = "Ошибка загрузки данных (см. console). Часто это лимиты CoinGecko или неверный coin id.";
+    $("signalText").className = "sig bad";
+    $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
+  }
+}
+
+function resetAll(){
+  $("customId").value = "";
+  $("signalText").textContent = "—";
+  $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
+  $("ts").textContent = "—";
+  $("lastPrice").textContent = "—";
+  const ctx = $("chart").getContext("2d");
+  ctx.clearRect(0,0,$("chart").width,$("chart").height);
+}
+
+$("loadBtn").addEventListener("click", load);
+$("resetBtn").addEventListener("click", resetAll);
+$("spotBtn").addEventListener("click", refreshSpot);
+
+// старт
+refreshSpot();
+load();
+</script>
+</body>
+</html>
