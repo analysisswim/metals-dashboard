@@ -42,14 +42,15 @@
     table{width:100%;border-collapse:collapse;font-size:12px}
     th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}
     th{color:#c7d2f0;font-weight:600}
+    .pill{display:inline-block;padding:3px 8px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--muted)}
   </style>
 </head>
 <body>
 <div class="wrap">
   <h1 class="title">Металлы/токены — график + сигналы (MA/RSI/ATR)</h1>
   <p class="sub">
-    Свечи (klines) берём через твой Cloudflare Worker <b>/api/klines</b> (по умолчанию Kraken).
-    Spot XAUUSD/XAGUSD — через <b>/api/spot</b>. Если не грузится — смотри блок “Состояние”.
+    Свечи берём через твой Cloudflare Worker <b>/api/klines</b> (Kraken или CoinGecko).
+    Spot XAUUSD/XAGUSD — через <b>/api/spot</b>. Прогноз/уровни — через <b>/api/forecast</b>.
   </p>
 
   <div class="grid">
@@ -64,6 +65,15 @@
               <option value="tether-gold">XAUt (Tether Gold)</option>
             </select>
           </div>
+
+          <div>
+            <label>Источник свечей</label>
+            <select id="source">
+              <option value="kraken" selected>Kraken (рекомендовано)</option>
+              <option value="coingecko">CoinGecko (может 429)</option>
+            </select>
+          </div>
+
           <div>
             <label>Таймфрейм (days)</label>
             <select id="days">
@@ -83,6 +93,7 @@
             </select>
           </div>
         </div>
+
         <div class="row">
           <button id="loadBtn">Загрузить</button>
           <button id="resetBtn">Сброс</button>
@@ -104,6 +115,7 @@
 
     <!-- RIGHT -->
     <div class="card">
+      <!-- Spot -->
       <div class="box" style="margin-bottom:12px">
         <div class="row space">
           <div>
@@ -115,6 +127,7 @@
         </div>
       </div>
 
+      <!-- Params -->
       <div class="box" style="margin-bottom:12px">
         <div style="font-weight:700;margin-bottom:8px">Параметры стратегии</div>
         <div class="row">
@@ -129,14 +142,25 @@
         </div>
       </div>
 
+      <!-- Signal -->
       <div class="box" style="margin-bottom:12px">
         <div class="row space">
           <div style="font-weight:700">Сигнал</div>
-          <div class="small">—</div>
+          <div class="small" id="sigMeta">—</div>
         </div>
         <div id="signal" class="kpi" style="margin-top:8px">—</div>
       </div>
 
+      <!-- Forecast -->
+      <div class="box" style="margin-bottom:12px">
+        <div class="row space">
+          <div style="font-weight:700">Прогноз / уровни (ATR)</div>
+          <span class="pill" id="trendPill">—</span>
+        </div>
+        <div class="small" style="margin-top:8px" id="forecastBox">—</div>
+      </div>
+
+      <!-- Table -->
       <div class="box" style="margin-bottom:12px">
         <div style="font-weight:700;margin-bottom:8px">Последние бары (индикаторы)</div>
         <div style="max-height:240px;overflow:auto;border-radius:12px">
@@ -149,6 +173,7 @@
         </div>
       </div>
 
+      <!-- State -->
       <div class="box">
         <div style="font-weight:700;margin-bottom:6px">Состояние</div>
         <div id="state" class="small">—</div>
@@ -160,7 +185,6 @@
 <script>
 const $ = (id)=>document.getElementById(id);
 const num = (v, d=2)=> (v==null || !isFinite(v)) ? "—" : Number(v).toFixed(d);
-
 function setState(msg, cls=""){
   const el = $("state");
   el.className = "small " + cls;
@@ -199,31 +223,72 @@ async function refreshSpot(){
   }
 }
 
-// ===== Klines через Worker (по умолчанию Kraken) =====
-async function fetchKlines(asset, days=30, limit=200){
-  const pair = (asset === "tether-gold") ? "XAUTUSD" : "PAXGUSD";
+// ===== Klines =====
+async function fetchKlines({asset, source, days, limit}){
+  if(source === "kraken"){
+    const pair = (asset === "tether-gold") ? "XAUTUSD" : "PAXGUSD";
+    const url =
+      `${API_BASE}/api/klines?market=kraken` +
+      `&pair=${encodeURIComponent(pair)}` +
+      `&days=${encodeURIComponent(days)}` +
+      `&interval=60` +
+      `&limit=${encodeURIComponent(limit)}`;
+    const r = await fetch(url, { cache:"no-store" });
+    const ct = (r.headers.get("content-type") || "");
+    if(!ct.includes("application/json")){
+      const raw = await r.text();
+      throw new Error("Bad klines (not JSON): " + raw.slice(0,160));
+    }
+    const data = await r.json();
+    if(!Array.isArray(data) || !data.length || !Array.isArray(data[0]) || data[0].length<5){
+      throw new Error("Bad klines payload");
+    }
+    return data;
+  }
 
+  // coingecko
+  const coin = asset; // asset already pax-gold / tether-gold
   const url =
-    `${API_BASE}/api/klines?market=kraken` +
-    `&pair=${encodeURIComponent(pair)}` +
+    `${API_BASE}/api/klines?market=coingecko` +
+    `&coin=${encodeURIComponent(coin)}` +
+    `&vs=usd` +
     `&days=${encodeURIComponent(days)}` +
-    `&interval=60` +
     `&limit=${encodeURIComponent(limit)}`;
 
   const r = await fetch(url, { cache:"no-store" });
-
   const ct = (r.headers.get("content-type") || "");
   if(!ct.includes("application/json")){
     const raw = await r.text();
     throw new Error("Bad klines (not JSON): " + raw.slice(0,160));
   }
-
   const data = await r.json();
+  if(Array.isArray(data)) return data;
 
-  // Worker возвращает массив свечей: [[ts,o,h,l,c],...]
-  if(!Array.isArray(data) || data.length===0 || !Array.isArray(data[0]) || data[0].length<5){
-    throw new Error("Bad klines payload");
+  // если Worker вернул объект ok:false — покажем ошибку красиво
+  if(data?.ok === false){
+    throw new Error(`${data.error} (${data.status})`);
   }
+  throw new Error("Bad klines payload");
+}
+
+// ===== Forecast =====
+async function fetchForecast({asset, days, limit}){
+  // прогноз делаем через Kraken пары
+  const pair = (asset === "tether-gold") ? "XAUTUSD" : "PAXGUSD";
+  const url =
+    `${API_BASE}/api/forecast?market=kraken` +
+    `&pair=${encodeURIComponent(pair)}` +
+    `&days=${encodeURIComponent(days)}` +
+    `&interval=60` +
+    `&limit=${encodeURIComponent(limit)}`;
+  const r = await fetch(url, { cache:"no-store" });
+  const ct = (r.headers.get("content-type") || "");
+  if(!ct.includes("application/json")){
+    const raw = await r.text();
+    throw new Error("Forecast not JSON: " + raw.slice(0,160));
+  }
+  const data = await r.json();
+  if(!data?.ok) throw new Error(data?.error || "Forecast error");
   return data;
 }
 
@@ -325,10 +390,15 @@ function drawChart(canvas, candles, maF, maS){
 
 // ===== Main =====
 async function loadAll(){
-  setState("Загружаю klines через Worker…", "status-warn");
+  setState("Загружаю klines…", "status-warn");
   $("rows").innerHTML = `<tr><td colspan="6" class="small">загрузка…</td></tr>`;
+  $("signal").textContent = "—";
+  $("sigMeta").textContent = "—";
+  $("forecastBox").textContent = "—";
+  $("trendPill").textContent = "—";
 
   const asset = $("asset").value;
+  const source = $("source").value;
   const days = Number($("days").value);
   const limit = Number($("limit").value);
 
@@ -342,7 +412,7 @@ async function loadAll(){
   const tpX = Number($("tpX").value||3);
 
   try{
-    const ohlc = await fetchKlines(asset, days, limit);
+    const ohlc = await fetchKlines({asset, source, days, limit});
 
     const closes = ohlc.map(x=>x[4]);
     const maF = SMA(closes, maFast);
@@ -352,9 +422,11 @@ async function loadAll(){
 
     const lastIdx = ohlc.length-1;
     const lastClose = closes[lastIdx];
+
     $("last").textContent = num(lastClose,2) + " USD";
     $("ts").textContent = new Date().toLocaleString();
 
+    // signal
     let signal = "NEUTRAL";
     const prev = lastIdx-1;
 
@@ -377,9 +449,11 @@ async function loadAll(){
       if(atrLast!=null){ stop = lastClose + atrLast*stopX; tp = lastClose - atrLast*tpX; }
     }
 
+    $("sigMeta").textContent = `источник: ${source}`;
     $("signal").textContent =
       `Сигнал: ${signal} · Close=${num(lastClose,2)} · RSI=${num(rsiLast,1)} · Stop≈${num(stop,2)} · TP≈${num(tp,2)} (ATR=${num(atrLast,2)})`;
 
+    // table
     const rows = [];
     for(let i=Math.max(0,lastIdx-11); i<=lastIdx; i++){
       rows.push(`
@@ -396,11 +470,27 @@ async function loadAll(){
     $("rows").innerHTML = rows.join("");
 
     drawChart($("chart"), ohlc, maF, maS);
-    setState("OK: klines загружены через Worker (Kraken)", "status-ok");
+
+    // forecast (через Kraken)
+    try{
+      const fc = await fetchForecast({asset, days, limit});
+      $("trendPill").textContent = `TREND: ${fc.trend}`;
+      if(fc.levels){
+        $("forecastBox").innerHTML =
+          `MA20=${num(fc.ma20,2)} · MA50=${num(fc.ma50,2)} · ATR=${num(fc.levels.atr,2)}<br>` +
+          `R1=${num(fc.levels.r1,2)} · R2=${num(fc.levels.r2,2)} · R3=${num(fc.levels.r3,2)}<br>` +
+          `S1=${num(fc.levels.s1,2)} · S2=${num(fc.levels.s2,2)} · S3=${num(fc.levels.s3,2)}`;
+      } else {
+        $("forecastBox").textContent = "Недостаточно данных для уровней (ATR)";
+      }
+    }catch(e){
+      $("forecastBox").textContent = "Forecast error: " + e.message;
+    }
+
+    setState(`OK: klines загружены (${source})`, "status-ok");
   }catch(e){
     console.error(e);
     setState("Ошибка загрузки: " + e.message, "status-bad");
-    $("signal").textContent = "—";
     $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
   }
 }
@@ -409,6 +499,9 @@ function resetUI(){
   $("ts").textContent = "—";
   $("last").textContent = "—";
   $("signal").textContent = "—";
+  $("sigMeta").textContent = "—";
+  $("forecastBox").textContent = "—";
+  $("trendPill").textContent = "—";
   $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
   const ctx = $("chart").getContext("2d");
   ctx.clearRect(0,0,$("chart").width,$("chart").height);
