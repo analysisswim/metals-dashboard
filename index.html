@@ -48,11 +48,12 @@
 <div class="wrap">
   <h1 class="title">Металлы/токены — график + сигналы (MA/RSI/ATR)</h1>
   <p class="sub">
-    Свечи (klines) берём через твой Cloudflare Worker <b>/api/klines</b> (CoinGecko внутри).
-    Spot XAUUSD/XAGUSD — через <b>/api/spot</b>. Если что-то не грузится — смотри блок “Состояние”.
+    Свечи (klines) берём через твой Cloudflare Worker <b>/api/klines</b> (по умолчанию Kraken).
+    Spot XAUUSD/XAGUSD — через <b>/api/spot</b>. Если не грузится — смотри блок “Состояние”.
   </p>
 
   <div class="grid">
+    <!-- LEFT -->
     <div class="card">
       <div class="row space">
         <div class="row">
@@ -101,6 +102,7 @@
       </p>
     </div>
 
+    <!-- RIGHT -->
     <div class="card">
       <div class="box" style="margin-bottom:12px">
         <div class="row space">
@@ -166,7 +168,7 @@ function setState(msg, cls=""){
 }
 function tsToStr(ms){ return new Date(ms).toLocaleString(); }
 
-// ==== твой API Worker домен ====
+// === твой API Worker домен ===
 const API_BASE = "https://api-metals.analysisswim.workers.dev";
 
 // ===== Spot =====
@@ -191,15 +193,14 @@ async function refreshSpot(){
     $("spotXAG").textContent = num(xag.price, 3) + " USD";
     $("spotSrc").textContent = xau.source || "—";
   }catch(e){
-    $("spotSrc").textContent = "ошибка (см. состояние/console)";
+    $("spotSrc").textContent = "ошибка";
     setState("Spot ошибка: " + e.message, "status-bad");
     console.error(e);
   }
 }
 
-// ===== Klines через Worker (CoinGecko внутри) =====
+// ===== Klines через Worker (по умолчанию Kraken) =====
 async function fetchKlines(asset, days=30, limit=200){
-  // asset: "pax-gold" | "tether-gold"
   const pair = (asset === "tether-gold") ? "XAUTUSD" : "PAXGUSD";
 
   const url =
@@ -210,18 +211,21 @@ async function fetchKlines(asset, days=30, limit=200){
     `&limit=${encodeURIComponent(limit)}`;
 
   const r = await fetch(url, { cache:"no-store" });
+
   const ct = (r.headers.get("content-type") || "");
   if(!ct.includes("application/json")){
     const raw = await r.text();
     throw new Error("Bad klines (not JSON): " + raw.slice(0,160));
   }
+
   const data = await r.json();
-  if(!Array.isArray(data) || data.length===0 || !Array.isArray(data[0])){
+
+  // Worker возвращает массив свечей: [[ts,o,h,l,c],...]
+  if(!Array.isArray(data) || data.length===0 || !Array.isArray(data[0]) || data[0].length<5){
     throw new Error("Bad klines payload");
   }
-  return data; // [[ts,o,h,l,c],...]
+  return data;
 }
-
 
 // ===== Indicators =====
 function SMA(values, period){
@@ -324,7 +328,7 @@ async function loadAll(){
   setState("Загружаю klines через Worker…", "status-warn");
   $("rows").innerHTML = `<tr><td colspan="6" class="small">загрузка…</td></tr>`;
 
-  const coinId = $("asset").value;
+  const asset = $("asset").value;
   const days = Number($("days").value);
   const limit = Number($("limit").value);
 
@@ -338,7 +342,7 @@ async function loadAll(){
   const tpX = Number($("tpX").value||3);
 
   try{
-    const ohlc = await fetchKlines(coinId, days, limit);
+    const ohlc = await fetchKlines(asset, days, limit);
 
     const closes = ohlc.map(x=>x[4]);
     const maF = SMA(closes, maFast);
@@ -392,7 +396,7 @@ async function loadAll(){
     $("rows").innerHTML = rows.join("");
 
     drawChart($("chart"), ohlc, maF, maS);
-    setState("OK: klines загружены через Worker (CoinGecko внутри)", "status-ok");
+    setState("OK: klines загружены через Worker (Kraken)", "status-ok");
   }catch(e){
     console.error(e);
     setState("Ошибка загрузки: " + e.message, "status-bad");
