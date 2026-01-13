@@ -267,10 +267,15 @@ async function fetchOHLC(coinId, days){
 const SPOT_API = "https://metals-proxy.analysisswim.workers.dev/api/spot";
 
 async function fetchSpot(symbol){
-  const url = `${SPOT_API}?symbol=${encodeURIComponent(symbol)}`;
-  const r = await fetch(url, { cache: "no-store" });
+  const r = await fetch(`${SPOT_API}?symbol=${encodeURIComponent(symbol)}`, { cache:"no-store" });
 
-  const ct = (r.headers.get("content-type") || "");
+  // если не 200 — покажем текст ошибки
+  if(!r.ok){
+    const raw = await r.text();
+    throw new Error(`Spot HTTP ${r.status}: ` + raw.slice(0,120));
+  }
+
+  const ct = (r.headers.get("content-type")||"");
   if(!ct.includes("application/json")){
     const raw = await r.text();
     throw new Error("Spot not JSON: " + raw.slice(0,120));
@@ -295,11 +300,12 @@ async function refreshSpot(){
     $("spotXAU").textContent = num(xau.price, 2) + " USD";
     $("spotXAG").textContent = num(xag.price, 3) + " USD";
     $("spotSrc").textContent = xau.source || "—";
-  }catch(e){
+  } catch(e){
     $("spotSrc").textContent = "ошибка (см. console)";
     console.error(e);
   }
 }
+
 
 
 /** ====== Рисование (простое) ====== **/
