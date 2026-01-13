@@ -33,6 +33,7 @@
       border-radius:12px; padding:10px 12px; cursor:pointer
     }
     button:hover{filter:brightness(1.08)}
+    button:disabled{opacity:.55; cursor:not-allowed}
     .small{font-size:12px;color:var(--muted)}
     .kpi{font-variant-numeric:tabular-nums}
     .box{background:rgba(0,0,0,.15); border:1px solid var(--line); border-radius:14px; padding:12px}
@@ -42,15 +43,27 @@
     table{width:100%;border-collapse:collapse;font-size:12px}
     th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}
     th{color:#c7d2f0;font-weight:600}
-    .pill{display:inline-block;padding:3px 8px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--muted)}
+
+    /* мягкая “загрузка” без очистки графика */
+    .overlay{
+      position:absolute; inset:0;
+      display:none;
+      align-items:center; justify-content:center;
+      border-radius:14px;
+      background:rgba(0,0,0,.22);
+      backdrop-filter: blur(2px);
+      font-size:13px; color:var(--muted);
+    }
+    .chartWrap{position:relative}
+    .overlay.show{display:flex}
   </style>
 </head>
 <body>
 <div class="wrap">
   <h1 class="title">Металлы/токены — график + сигналы (MA/RSI/ATR)</h1>
   <p class="sub">
-    Свечи берём через твой Cloudflare Worker <b>/api/klines</b> (Kraken или CoinGecko).
-    Spot XAUUSD/XAGUSD — через <b>/api/spot</b>. Прогноз/уровни — через <b>/api/forecast</b>.
+    Свечи (klines) берём через твой Cloudflare Worker <b>/api/klines</b> (Kraken стабильно).
+    Spot XAUUSD/XAGUSD — через <b>/api/spot</b>. Если что-то не грузится — смотри блок “Состояние”.
   </p>
 
   <div class="grid">
@@ -65,15 +78,6 @@
               <option value="tether-gold">XAUt (Tether Gold)</option>
             </select>
           </div>
-
-          <div>
-            <label>Источник свечей</label>
-            <select id="source">
-              <option value="kraken" selected>Kraken (рекомендовано)</option>
-              <option value="coingecko">CoinGecko (может 429)</option>
-            </select>
-          </div>
-
           <div>
             <label>Таймфрейм (days)</label>
             <select id="days">
@@ -93,7 +97,6 @@
             </select>
           </div>
         </div>
-
         <div class="row">
           <button id="loadBtn">Загрузить</button>
           <button id="resetBtn">Сброс</button>
@@ -105,7 +108,10 @@
         <div class="small">Последняя цена (из свечей): <span id="last" class="kpi">—</span></div>
       </div>
 
-      <canvas id="chart" width="1200" height="420"></canvas>
+      <div class="chartWrap">
+        <canvas id="chart" width="1200" height="420"></canvas>
+        <div id="overlay" class="overlay">Загрузка…</div>
+      </div>
 
       <p class="small" style="margin:10px 0 0">
         BUY: MAfast пересекает MAslow вверх и RSI &lt; buyRSI. SELL: пересечение вниз и RSI &gt; sellRSI.
@@ -115,7 +121,6 @@
 
     <!-- RIGHT -->
     <div class="card">
-      <!-- Spot -->
       <div class="box" style="margin-bottom:12px">
         <div class="row space">
           <div>
@@ -127,7 +132,6 @@
         </div>
       </div>
 
-      <!-- Params -->
       <div class="box" style="margin-bottom:12px">
         <div style="font-weight:700;margin-bottom:8px">Параметры стратегии</div>
         <div class="row">
@@ -142,25 +146,14 @@
         </div>
       </div>
 
-      <!-- Signal -->
       <div class="box" style="margin-bottom:12px">
         <div class="row space">
           <div style="font-weight:700">Сигнал</div>
-          <div class="small" id="sigMeta">—</div>
+          <div class="small">—</div>
         </div>
         <div id="signal" class="kpi" style="margin-top:8px">—</div>
       </div>
 
-      <!-- Forecast -->
-      <div class="box" style="margin-bottom:12px">
-        <div class="row space">
-          <div style="font-weight:700">Прогноз / уровни (ATR)</div>
-          <span class="pill" id="trendPill">—</span>
-        </div>
-        <div class="small" style="margin-top:8px" id="forecastBox">—</div>
-      </div>
-
-      <!-- Table -->
       <div class="box" style="margin-bottom:12px">
         <div style="font-weight:700;margin-bottom:8px">Последние бары (индикаторы)</div>
         <div style="max-height:240px;overflow:auto;border-radius:12px">
@@ -173,7 +166,6 @@
         </div>
       </div>
 
-      <!-- State -->
       <div class="box">
         <div style="font-weight:700;margin-bottom:6px">Состояние</div>
         <div id="state" class="small">—</div>
@@ -183,21 +175,39 @@
 </div>
 
 <script>
+/** ===== Helpers ===== **/
 const $ = (id)=>document.getElementById(id);
 const num = (v, d=2)=> (v==null || !isFinite(v)) ? "—" : Number(v).toFixed(d);
+
 function setState(msg, cls=""){
   const el = $("state");
   el.className = "small " + cls;
   el.textContent = msg;
 }
 function tsToStr(ms){ return new Date(ms).toLocaleString(); }
+function setOverlay(on, text="Загрузка…"){
+  const ov = $("overlay");
+  ov.textContent = text;
+  ov.classList.toggle("show", !!on);
+}
 
-// === твой API Worker домен ===
+// fetch с таймаутом (чтоб не “висло”)
+async function fetchWithTimeout(url, ms=8000){
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), ms);
+  try{
+    return await fetch(url, { cache:"no-store", signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** ===== API base ===== **/
 const API_BASE = "https://api-metals.analysisswim.workers.dev";
 
-// ===== Spot =====
+/** ===== Spot ===== **/
 async function fetchSpot(symbol){
-  const r = await fetch(`${API_BASE}/api/spot?symbol=${encodeURIComponent(symbol)}`, { cache:"no-store" });
+  const r = await fetchWithTimeout(`${API_BASE}/api/spot?symbol=${encodeURIComponent(symbol)}`, 8000);
   const ct = (r.headers.get("content-type") || "");
   if (!ct.includes("application/json")) {
     const raw = await r.text();
@@ -207,10 +217,12 @@ async function fetchSpot(symbol){
   if (data?.price == null) throw new Error("Spot missing price");
   return data;
 }
+
+let isSpotLoading = false;
 async function refreshSpot(){
-  $("spotXAU").textContent = "—";
-  $("spotXAG").textContent = "—";
-  $("spotSrc").textContent = "—";
+  if (isSpotLoading) return;
+  isSpotLoading = true;
+  $("spotBtn").disabled = true;
   try{
     const [xau,xag] = await Promise.all([fetchSpot("XAUUSD"), fetchSpot("XAGUSD")]);
     $("spotXAU").textContent = num(xau.price, 2) + " USD";
@@ -220,79 +232,37 @@ async function refreshSpot(){
     $("spotSrc").textContent = "ошибка";
     setState("Spot ошибка: " + e.message, "status-bad");
     console.error(e);
+  }finally{
+    $("spotBtn").disabled = false;
+    isSpotLoading = false;
   }
 }
 
-// ===== Klines =====
-async function fetchKlines({asset, source, days, limit}){
-  if(source === "kraken"){
-    const pair = (asset === "tether-gold") ? "XAUTUSD" : "PAXGUSD";
-    const url =
-      `${API_BASE}/api/klines?market=kraken` +
-      `&pair=${encodeURIComponent(pair)}` +
-      `&days=${encodeURIComponent(days)}` +
-      `&interval=60` +
-      `&limit=${encodeURIComponent(limit)}`;
-    const r = await fetch(url, { cache:"no-store" });
-    const ct = (r.headers.get("content-type") || "");
-    if(!ct.includes("application/json")){
-      const raw = await r.text();
-      throw new Error("Bad klines (not JSON): " + raw.slice(0,160));
-    }
-    const data = await r.json();
-    if(!Array.isArray(data) || !data.length || !Array.isArray(data[0]) || data[0].length<5){
-      throw new Error("Bad klines payload");
-    }
-    return data;
-  }
-
-  // coingecko
-  const coin = asset; // asset already pax-gold / tether-gold
+/** ===== Klines (через Worker) ===== **/
+async function fetchKlines(asset, days=30, limit=200){
+  // ты уже используешь Kraken внутри Worker — это самый стабильный путь
+  const pair = (asset === "tether-gold") ? "XAUTUSD" : "PAXGUSD";
   const url =
-    `${API_BASE}/api/klines?market=coingecko` +
-    `&coin=${encodeURIComponent(coin)}` +
-    `&vs=usd` +
+    `${API_BASE}/api/klines?market=kraken` +
+    `&pair=${encodeURIComponent(pair)}` +
     `&days=${encodeURIComponent(days)}` +
+    `&interval=60` +
     `&limit=${encodeURIComponent(limit)}`;
 
-  const r = await fetch(url, { cache:"no-store" });
+  const r = await fetchWithTimeout(url, 12000);
   const ct = (r.headers.get("content-type") || "");
   if(!ct.includes("application/json")){
     const raw = await r.text();
     throw new Error("Bad klines (not JSON): " + raw.slice(0,160));
   }
   const data = await r.json();
-  if(Array.isArray(data)) return data;
-
-  // если Worker вернул объект ok:false — покажем ошибку красиво
-  if(data?.ok === false){
-    throw new Error(`${data.error} (${data.status})`);
+  if(!Array.isArray(data) || data.length===0 || !Array.isArray(data[0])){
+    throw new Error("Bad klines payload");
   }
-  throw new Error("Bad klines payload");
+  return data; // [[ts,o,h,l,c],...]
 }
 
-// ===== Forecast =====
-async function fetchForecast({asset, days, limit}){
-  // прогноз делаем через Kraken пары
-  const pair = (asset === "tether-gold") ? "XAUTUSD" : "PAXGUSD";
-  const url =
-    `${API_BASE}/api/forecast?market=kraken` +
-    `&pair=${encodeURIComponent(pair)}` +
-    `&days=${encodeURIComponent(days)}` +
-    `&interval=60` +
-    `&limit=${encodeURIComponent(limit)}`;
-  const r = await fetch(url, { cache:"no-store" });
-  const ct = (r.headers.get("content-type") || "");
-  if(!ct.includes("application/json")){
-    const raw = await r.text();
-    throw new Error("Forecast not JSON: " + raw.slice(0,160));
-  }
-  const data = await r.json();
-  if(!data?.ok) throw new Error(data?.error || "Forecast error");
-  return data;
-}
-
-// ===== Indicators =====
+/** ===== Indicators ===== **/
 function SMA(values, period){
   const out = Array(values.length).fill(null);
   let sum = 0;
@@ -305,6 +275,8 @@ function SMA(values, period){
 }
 function RSI(closes, period){
   const out = Array(closes.length).fill(null);
+  if(closes.length <= period) return out;
+
   let gains=0, losses=0;
   for(let i=1;i<=period;i++){
     const diff = closes[i]-closes[i-1];
@@ -324,6 +296,8 @@ function RSI(closes, period){
 }
 function ATR(ohlc, period){
   const out = Array(ohlc.length).fill(null);
+  if(ohlc.length === 0) return out;
+
   const tr = Array(ohlc.length).fill(null);
   for(let i=0;i<ohlc.length;i++){
     const [, ,h,l,] = ohlc[i];
@@ -340,7 +314,7 @@ function ATR(ohlc, period){
   return out;
 }
 
-// ===== Chart =====
+/** ===== Chart ===== **/
 function drawChart(canvas, candles, maF, maS){
   const ctx = canvas.getContext("2d");
   const w = canvas.width, h = canvas.height;
@@ -362,12 +336,14 @@ function drawChart(canvas, candles, maF, maS){
   }
   ctx.globalAlpha=1;
 
+  // price
   ctx.strokeStyle="rgba(255,255,255,.85)";
   ctx.lineWidth=1.2;
   ctx.beginPath();
   closes.forEach((c,i)=>{ const xx=x(i), yy=y(c); if(i===0) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
+  // ma fast
   ctx.strokeStyle="rgba(59,214,113,.9)";
   ctx.lineWidth=1.5;
   ctx.beginPath();
@@ -375,6 +351,7 @@ function drawChart(canvas, candles, maF, maS){
   maF.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!startedF){ctx.moveTo(xx,yy); startedF=true;} else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
+  // ma slow
   ctx.strokeStyle="rgba(255,107,107,.9)";
   ctx.lineWidth=1.5;
   ctx.beginPath();
@@ -382,23 +359,27 @@ function drawChart(canvas, candles, maF, maS){
   maS.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!startedS){ctx.moveTo(xx,yy); startedS=true;} else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
+  // labels
   ctx.fillStyle="rgba(168,179,207,1)";
   ctx.font="12px system-ui";
   ctx.fillText(num(max,2), 8, padT+10);
   ctx.fillText(num(min,2), 8, padT+plotH);
 }
 
-// ===== Main =====
+/** ===== Main flow ===== **/
+let isLoading = false;
+
 async function loadAll(){
-  setState("Загружаю klines…", "status-warn");
-  $("rows").innerHTML = `<tr><td colspan="6" class="small">загрузка…</td></tr>`;
-  $("signal").textContent = "—";
-  $("sigMeta").textContent = "—";
-  $("forecastBox").textContent = "—";
-  $("trendPill").textContent = "—";
+  if (isLoading) return;
+  isLoading = true;
+
+  $("loadBtn").disabled = true;
+  $("resetBtn").disabled = true;
+  $("loadBtn").textContent = "Загрузка…";
+  setOverlay(true, "Загрузка данных…");
+  setState("Загружаю klines через Worker…", "status-warn");
 
   const asset = $("asset").value;
-  const source = $("source").value;
   const days = Number($("days").value);
   const limit = Number($("limit").value);
 
@@ -412,7 +393,7 @@ async function loadAll(){
   const tpX = Number($("tpX").value||3);
 
   try{
-    const ohlc = await fetchKlines({asset, source, days, limit});
+    const ohlc = await fetchKlines(asset, days, limit);
 
     const closes = ohlc.map(x=>x[4]);
     const maF = SMA(closes, maFast);
@@ -426,7 +407,6 @@ async function loadAll(){
     $("last").textContent = num(lastClose,2) + " USD";
     $("ts").textContent = new Date().toLocaleString();
 
-    // signal
     let signal = "NEUTRAL";
     const prev = lastIdx-1;
 
@@ -449,11 +429,10 @@ async function loadAll(){
       if(atrLast!=null){ stop = lastClose + atrLast*stopX; tp = lastClose - atrLast*tpX; }
     }
 
-    $("sigMeta").textContent = `источник: ${source}`;
     $("signal").textContent =
       `Сигнал: ${signal} · Close=${num(lastClose,2)} · RSI=${num(rsiLast,1)} · Stop≈${num(stop,2)} · TP≈${num(tp,2)} (ATR=${num(atrLast,2)})`;
 
-    // table
+    // таблица (последние 12)
     const rows = [];
     for(let i=Math.max(0,lastIdx-11); i<=lastIdx; i++){
       rows.push(`
@@ -470,28 +449,17 @@ async function loadAll(){
     $("rows").innerHTML = rows.join("");
 
     drawChart($("chart"), ohlc, maF, maS);
-
-    // forecast (через Kraken)
-    try{
-      const fc = await fetchForecast({asset, days, limit});
-      $("trendPill").textContent = `TREND: ${fc.trend}`;
-      if(fc.levels){
-        $("forecastBox").innerHTML =
-          `MA20=${num(fc.ma20,2)} · MA50=${num(fc.ma50,2)} · ATR=${num(fc.levels.atr,2)}<br>` +
-          `R1=${num(fc.levels.r1,2)} · R2=${num(fc.levels.r2,2)} · R3=${num(fc.levels.r3,2)}<br>` +
-          `S1=${num(fc.levels.s1,2)} · S2=${num(fc.levels.s2,2)} · S3=${num(fc.levels.s3,2)}`;
-      } else {
-        $("forecastBox").textContent = "Недостаточно данных для уровней (ATR)";
-      }
-    }catch(e){
-      $("forecastBox").textContent = "Forecast error: " + e.message;
-    }
-
-    setState(`OK: klines загружены (${source})`, "status-ok");
+    setState("OK: klines загружены через Worker (Kraken)", "status-ok");
   }catch(e){
     console.error(e);
     setState("Ошибка загрузки: " + e.message, "status-bad");
-    $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
+    // Важно: ничего не очищаем — старые данные остаются на экране
+  }finally{
+    setOverlay(false);
+    $("loadBtn").disabled = false;
+    $("resetBtn").disabled = false;
+    $("loadBtn").textContent = "Загрузить";
+    isLoading = false;
   }
 }
 
@@ -499,9 +467,6 @@ function resetUI(){
   $("ts").textContent = "—";
   $("last").textContent = "—";
   $("signal").textContent = "—";
-  $("sigMeta").textContent = "—";
-  $("forecastBox").textContent = "—";
-  $("trendPill").textContent = "—";
   $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
   const ctx = $("chart").getContext("2d");
   ctx.clearRect(0,0,$("chart").width,$("chart").height);
@@ -512,6 +477,7 @@ $("loadBtn").addEventListener("click", loadAll);
 $("resetBtn").addEventListener("click", resetUI);
 $("spotBtn").addEventListener("click", refreshSpot);
 
+// старт
 resetUI();
 refreshSpot();
 </script>
