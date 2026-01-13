@@ -263,24 +263,35 @@ async function fetchOHLC(coinId, days){
 }
 
 /** ====== Spot через Worker ====== **/
+
+const SPOT_API = "https://metals-proxy.analysisswim.workers.dev/api/spot";
+
 async function fetchSpot(symbol){
-  const r = await fetch(`${SPOT_API}?symbol=${encodeURIComponent(symbol)}`, {cache:"no-store"});
-  const ct = (r.headers.get("content-type")||"");
+  const url = `${SPOT_API}?symbol=${encodeURIComponent(symbol)}`;
+  const r = await fetch(url, { cache: "no-store" });
+
+  const ct = (r.headers.get("content-type") || "");
   if(!ct.includes("application/json")){
     const raw = await r.text();
-    throw new Error("Spot not JSON: "+raw.slice(0,120));
+    throw new Error("Spot not JSON: " + raw.slice(0,120));
   }
+
   const data = await r.json();
-  if(data?.price==null) throw new Error("Spot missing price");
-  return data;
+  if(data?.price == null) throw new Error("Spot missing price");
+  return data; // {symbol, price, currency, ts, source}
 }
 
 async function refreshSpot(){
   $("spotXAU").textContent = "—";
   $("spotXAG").textContent = "—";
   $("spotSrc").textContent = "—";
+
   try{
-    const [xau,xag] = await Promise.all([fetchSpot("XAUUSD"), fetchSpot("XAGUSD")]);
+    const [xau, xag] = await Promise.all([
+      fetchSpot("XAUUSD"),
+      fetchSpot("XAGUSD")
+    ]);
+
     $("spotXAU").textContent = num(xau.price, 2) + " USD";
     $("spotXAG").textContent = num(xag.price, 3) + " USD";
     $("spotSrc").textContent = xau.source || "—";
@@ -289,6 +300,7 @@ async function refreshSpot(){
     console.error(e);
   }
 }
+
 
 /** ====== Рисование (простое) ====== **/
 function drawChart(canvas, candles, maF, maS){
