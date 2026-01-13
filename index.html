@@ -198,12 +198,15 @@ async function refreshSpot(){
 }
 
 // ===== Klines через Worker (CoinGecko внутри) =====
-async function fetchKlines(coinId, vs="usd", days=30, limit=200){
+async function fetchKlines(asset, days=30, limit=200){
+  // asset: "pax-gold" | "tether-gold"
+  const pair = (asset === "tether-gold") ? "XAUTUSD" : "PAXGUSD";
+
   const url =
-    `${API_BASE}/api/klines?market=coingecko` +
-    `&coin=${encodeURIComponent(coinId)}` +
-    `&vs=${encodeURIComponent(vs)}` +
+    `${API_BASE}/api/klines?market=kraken` +
+    `&pair=${encodeURIComponent(pair)}` +
     `&days=${encodeURIComponent(days)}` +
+    `&interval=60` +
     `&limit=${encodeURIComponent(limit)}`;
 
   const r = await fetch(url, { cache:"no-store" });
@@ -218,6 +221,7 @@ async function fetchKlines(coinId, vs="usd", days=30, limit=200){
   }
   return data; // [[ts,o,h,l,c],...]
 }
+
 
 // ===== Indicators =====
 function SMA(values, period){
