@@ -3,22 +3,28 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Металлы/токены — график + сигналы + перезаходы (MA/RSI/ATR)</title>
+  <title>Металлы/токены — график + сигналы (MA/RSI/ATR)</title>
   <style>
     :root{
-      --bg:#0b1220; --text:#e7eefc; --muted:#a8b3cf;
+      --bg:#0b1220; --card:#121a2b; --card2:#0f1626;
+      --text:#e7eefc; --muted:#a8b3cf;
       --line:rgba(255,255,255,.08); --btn:#1b2540;
       --ok:#3bd671; --bad:#ff6b6b; --warn:#ffd166;
     }
-    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
-    .wrap{max-width:1280px;margin:18px auto;padding:0 14px}
+    html,body{
+      margin:0;height:100%;background:var(--bg);color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif
+    }
+    .wrap{max-width:1200px;margin:18px auto;padding:0 14px}
     .title{font-size:18px;margin:0 0 6px}
     .sub{color:var(--muted);font-size:13px;margin:0 0 14px;line-height:1.35}
-    .grid{display:grid;grid-template-columns: 1.5fr .85fr; gap:14px}
+    .grid{display:grid;grid-template-columns: 1.4fr .8fr; gap:14px}
     @media(max-width:980px){.grid{grid-template-columns:1fr}}
-    .card{background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
-      border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow:0 12px 40px rgba(0,0,0,.35)}
+    .card{
+      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      border:1px solid var(--line); border-radius:16px; padding:14px;
+      box-shadow:0 12px 40px rgba(0,0,0,.35)
+    }
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     .row.space{justify-content:space-between}
     label{font-size:12px;color:var(--muted);display:block;margin:0 0 6px}
@@ -37,21 +43,21 @@
     .kpi{font-variant-numeric:tabular-nums}
     .box{background:rgba(0,0,0,.15); border:1px solid var(--line); border-radius:14px; padding:12px}
     .status-ok{color:var(--ok)} .status-bad{color:var(--bad)} .status-warn{color:var(--warn)}
-    #chart{width:100%; height:440px; border-radius:14px; background:rgba(0,0,0,.18);
-      border:1px solid var(--line); display:block}
+    #chart{
+      width:100%; height:420px; border-radius:14px; background:rgba(0,0,0,.18);
+      border:1px solid var(--line); display:block
+    }
     table{width:100%;border-collapse:collapse;font-size:12px}
     th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}
     th{color:#c7d2f0;font-weight:600}
-    .pill{display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03)}
-    .pill.ok{color:var(--ok)} .pill.bad{color:var(--bad)} .pill.warn{color:var(--warn)}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1 class="title">Металлы/токены — график + сигналы + перезаходы (MA/RSI/ATR)</h1>
+  <h1 class="title">Металлы/токены — график + сигналы (MA/RSI/ATR)</h1>
   <p class="sub">
-    Свечи берём через <b>Cloudflare Worker</b> (Binance klines для PAXG/XAUt). Spot XAUUSD/XAGUSD — тоже через Worker (/api/spot).
-    Это инструмент анализа, не финсовет.
+    Свечи берём через твой Cloudflare Worker (/api/klines) из CoinGecko (агрегация).
+    Spot XAUUSD/XAGUSD — через /api/spot. Если что-то не грузится — смотри блок “Состояние”.
   </p>
 
   <div class="grid">
@@ -62,39 +68,39 @@
           <div>
             <label>Актив (график)</label>
             <select id="asset">
-              <option value="PAXGUSDT" selected>PAXG (Pax Gold)</option>
-              <option value="XAUTUSDT">XAUt (Tether Gold)</option>
-              <option value="XAUUSDT">XAU (synthetic)</option>
-              <option value="XAGUSDT">XAG (synthetic)</option>
+              <option value="pax-gold" selected>PAXG (Pax Gold)</option>
+              <option value="tether-gold">XAUt (Tether Gold)</option>
             </select>
           </div>
 
           <div>
             <label>Таймфрейм</label>
-            <select id="tf">
+            <select id="interval">
               <option value="15m">15m</option>
               <option value="1h" selected>1h</option>
               <option value="4h">4h</option>
-              <option value="1d">1D</option>
+              <option value="1d">1d</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Период (days)</label>
+            <select id="days">
+              <option value="7">7 дней</option>
+              <option value="30" selected>30 дней</option>
+              <option value="90">90 дней</option>
+              <option value="180">180 дней</option>
+              <option value="365">365 дней</option>
             </select>
           </div>
 
           <div>
             <label>Глубина (баров)</label>
             <select id="limit">
-              <option value="120">120</option>
+              <option value="100">100</option>
               <option value="200" selected>200</option>
-              <option value="400">400</option>
+              <option value="365">365</option>
               <option value="800">800</option>
-            </select>
-          </div>
-
-          <div>
-            <label>Стратегия</label>
-            <select id="strategy">
-              <option value="trend" selected>Trend (MA + RSI)</option>
-              <option value="reversion">Reversion (RSI экстремумы)</option>
-              <option value="breakout">Breakout (волатильность)</option>
             </select>
           </div>
         </div>
@@ -107,19 +113,20 @@
 
       <div class="row space" style="margin:10px 0 8px">
         <div class="small">Обновлено: <span id="ts">—</span></div>
-        <div class="small">Последняя цена: <span id="last" class="kpi">—</span></div>
+        <div class="small">Последняя цена (close): <span id="last" class="kpi">—</span></div>
       </div>
 
-      <canvas id="chart" width="1400" height="440"></canvas>
+      <canvas id="chart" width="1200" height="420"></canvas>
 
       <p class="small" style="margin:10px 0 0">
-        Линии: цена (белая), MA fast (зелёная), MA slow (красная). Уровни: Fib 0.382/0.5/0.618 и ATR-перезаходы.
+        BUY: MAfast пересекает MAslow вверх и RSI &lt; buyRSI.
+        SELL: пересечение вниз и RSI &gt; sellRSI.
+        Stop/TP = ATR × множители.
       </p>
     </div>
 
     <!-- RIGHT -->
     <div class="card">
-      <!-- Spot -->
       <div class="box" style="margin-bottom:12px">
         <div class="row space">
           <div>
@@ -131,58 +138,31 @@
         </div>
       </div>
 
-      <!-- Params -->
       <div class="box" style="margin-bottom:12px">
-        <div style="font-weight:700;margin-bottom:8px">Параметры</div>
+        <div style="font-weight:700;margin-bottom:8px">Параметры стратегии</div>
         <div class="row">
           <div><label>MA fast</label><input id="maFast" type="number" value="9" /></div>
           <div><label>MA slow</label><input id="maSlow" type="number" value="21" /></div>
           <div><label>RSI period</label><input id="rsiP" type="number" value="14" /></div>
           <div><label>ATR period</label><input id="atrP" type="number" value="14" /></div>
-
           <div><label>BUY RSI &lt;</label><input id="buyRSI" type="number" value="55" /></div>
           <div><label>SELL RSI &gt;</label><input id="sellRSI" type="number" value="65" /></div>
-
           <div><label>Stop ATR ×</label><input id="stopX" type="number" value="2" /></div>
           <div><label>TP ATR ×</label><input id="tpX" type="number" value="3" /></div>
-
-          <div><label>Перезаход ATR ×</label><input id="reX" type="number" value="1.0" step="0.1"/></div>
         </div>
       </div>
 
-      <!-- Signal -->
       <div class="box" style="margin-bottom:12px">
         <div class="row space">
           <div style="font-weight:700">Сигнал</div>
-          <div id="sigPill" class="pill">—</div>
+          <div class="small" id="sigMeta">—</div>
         </div>
         <div id="signal" class="kpi" style="margin-top:8px">—</div>
-        <div id="levels" class="small" style="margin-top:8px">—</div>
       </div>
 
-      <!-- Position -->
       <div class="box" style="margin-bottom:12px">
-        <div class="row space">
-          <div style="font-weight:700">Позиция (симулятор)</div>
-          <div class="small">local only</div>
-        </div>
-        <div class="row" style="margin-top:8px">
-          <button id="enterLong">Enter LONG</button>
-          <button id="enterShort">Enter SHORT</button>
-          <button id="flatBtn">FLAT</button>
-        </div>
-        <div class="row" style="margin-top:8px">
-          <button id="tp25">TP 25%</button>
-          <button id="tp50">TP 50%</button>
-          <button id="tp75">TP 75%</button>
-        </div>
-        <div id="posBox" class="small" style="margin-top:10px">—</div>
-      </div>
-
-      <!-- Table -->
-      <div class="box" style="margin-bottom:12px">
-        <div style="font-weight:700;margin-bottom:8px">Последние бары</div>
-        <div style="max-height:220px;overflow:auto;border-radius:12px">
+        <div style="font-weight:700;margin-bottom:8px">Последние бары (индикаторы)</div>
+        <div style="max-height:240px;overflow:auto;border-radius:12px">
           <table>
             <thead><tr>
               <th>Время</th><th>Close</th><th>MAf</th><th>MAs</th><th>RSI</th><th>ATR</th>
@@ -192,7 +172,6 @@
         </div>
       </div>
 
-      <!-- State -->
       <div class="box">
         <div style="font-weight:700;margin-bottom:6px">Состояние</div>
         <div id="state" class="small">—</div>
@@ -205,82 +184,96 @@
 /** ===== Helpers ===== **/
 const $ = (id)=>document.getElementById(id);
 const num = (v, d=2)=> (v==null || !isFinite(v)) ? "—" : Number(v).toFixed(d);
-function setState(msg, cls=""){ const el=$("state"); el.className="small "+cls; el.textContent=msg; }
-function tsToStr(ms){ return new Date(ms).toLocaleString(); }
-function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
 
-/** ===== API ===== **/
-const API_BASE = "https://api-metals.analysisswim.workers.dev";
-const SPOT_API = API_BASE + "/api/spot";
-const KLINES_API = API_BASE + "/api/klines";
+function setState(msg, cls=""){
+  const el = $("state");
+  el.className = "small " + cls;
+  el.textContent = msg;
+}
+function tsToStr(ms){
+  const dt = new Date(ms);
+  return dt.toLocaleString();
+}
+
+/** ===== API endpoints (твой Worker) ===== **/
+const BASE_API  = "https://api-metals.analysisswim.workers.dev";
+const SPOT_API  = BASE_API + "/api/spot";
+const KLINES_API= BASE_API + "/api/klines";
 
 /** ===== Spot ===== **/
 async function fetchSpot(symbol){
   const r = await fetch(`${SPOT_API}?symbol=${encodeURIComponent(symbol)}`, { cache:"no-store" });
-  const ct = (r.headers.get("content-type")||"");
-  if(!ct.includes("application/json")){
+  const ct = (r.headers.get("content-type") || "");
+  if (!ct.includes("application/json")) {
     const raw = await r.text();
-    throw new Error("Spot not JSON: "+raw.slice(0,120));
+    throw new Error("Spot not JSON: " + raw.slice(0,120));
   }
   const data = await r.json();
-  if(!data?.ok || data?.price==null) throw new Error("Spot missing price");
-  return data;
+  if (data?.price == null) throw new Error("Spot missing price");
+  return data; // {ok,symbol,price,currency,ts,source}
 }
 async function refreshSpot(){
-  $("spotXAU").textContent="—"; $("spotXAG").textContent="—"; $("spotSrc").textContent="—";
+  $("spotXAU").textContent = "—";
+  $("spotXAG").textContent = "—";
+  $("spotSrc").textContent = "—";
   try{
     const [xau,xag] = await Promise.all([fetchSpot("XAUUSD"), fetchSpot("XAGUSD")]);
-    $("spotXAU").textContent = num(xau.price,2)+" USD";
-    $("spotXAG").textContent = num(xag.price,3)+" USD";
+    $("spotXAU").textContent = num(xau.price, 2) + " USD";
+    $("spotXAG").textContent = num(xag.price, 3) + " USD";
     $("spotSrc").textContent = xau.source || "—";
   }catch(e){
-    $("spotSrc").textContent="ошибка (см. console)";
+    $("spotSrc").textContent = "ошибка (см. console)";
     console.error(e);
+    setState("Spot ошибка: " + e.message, "status-bad");
   }
 }
 
-/** ===== Klines ===== **/
-async function fetchKlines(symbol, interval, limit){
-  const url = `${KLINES_API}?market=binance&symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`;
+/** ===== Klines (CoinGecko aggregated in Worker) ===== **/
+async function fetchKlines(coinId, interval, days, limit){
+  const url =
+    `${KLINES_API}?market=coingecko&coin=${encodeURIComponent(coinId)}&vs=usd` +
+    `&days=${encodeURIComponent(days)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`;
+
   const r = await fetch(url, { cache:"no-store" });
-  const ct = (r.headers.get("content-type")||"");
-  if(!ct.includes("application/json")){
+  const ct = (r.headers.get("content-type") || "");
+  if (!ct.includes("application/json")) {
     const raw = await r.text();
-    throw new Error("Klines not JSON: "+raw.slice(0,120));
+    throw new Error("Klines not JSON: " + raw.slice(0,120));
   }
   const data = await r.json();
-  if(!data?.ok || !Array.isArray(data?.ohlc)) throw new Error("Bad klines payload");
-  return data.ohlc; // [ts,o,h,l,c]
+  if(!data?.ok || !Array.isArray(data?.ohlc) || data.ohlc.length === 0){
+    throw new Error(data?.error || "Bad klines payload");
+  }
+  return data.ohlc; // [ [ts, open, high, low, close], ... ]
 }
 
 /** ===== Indicators ===== **/
 function SMA(values, period){
   const out = Array(values.length).fill(null);
-  let sum=0;
+  let sum = 0;
   for(let i=0;i<values.length;i++){
     sum += values[i];
     if(i>=period) sum -= values[i-period];
-    if(i>=period-1) out[i]=sum/period;
+    if(i>=period-1) out[i] = sum/period;
   }
   return out;
 }
 function RSI(closes, period){
   const out = Array(closes.length).fill(null);
-  if(closes.length<=period) return out;
   let gains=0, losses=0;
   for(let i=1;i<=period;i++){
     const diff = closes[i]-closes[i-1];
-    if(diff>=0) gains+=diff; else losses-=diff;
+    if(diff>=0) gains += diff; else losses -= diff;
   }
-  let avgG=gains/period, avgL=losses/period;
+  let avgG = gains/period, avgL = losses/period;
   out[period] = avgL===0 ? 100 : (100 - (100/(1+(avgG/avgL))));
   for(let i=period+1;i<closes.length;i++){
-    const diff=closes[i]-closes[i-1];
-    const g=diff>0?diff:0;
-    const l=diff<0?-diff:0;
-    avgG=(avgG*(period-1)+g)/period;
-    avgL=(avgL*(period-1)+l)/period;
-    out[i]=avgL===0?100:(100-(100/(1+(avgG/avgL))));
+    const diff = closes[i]-closes[i-1];
+    const g = diff>0 ? diff : 0;
+    const l = diff<0 ? -diff : 0;
+    avgG = (avgG*(period-1)+g)/period;
+    avgL = (avgL*(period-1)+l)/period;
+    out[i] = avgL===0 ? 100 : (100 - (100/(1+(avgG/avgL))));
   }
   return out;
 }
@@ -288,13 +281,14 @@ function ATR(ohlc, period){
   const out = Array(ohlc.length).fill(null);
   const tr = Array(ohlc.length).fill(null);
   for(let i=0;i<ohlc.length;i++){
-    const [,o,h,l,c]=ohlc[i];
+    const [,o,h,l,c] = ohlc[i];
     if(i===0){ tr[i]=h-l; continue; }
-    const prevClose=ohlc[i-1][4];
-    tr[i]=Math.max(h-l, Math.abs(h-prevClose), Math.abs(l-prevClose));
+    const prevClose = ohlc[i-1][4];
+    tr[i] = Math.max(h-l, Math.abs(h-prevClose), Math.abs(l-prevClose));
   }
   let sum=0;
   for(let i=0;i<ohlc.length;i++){
+    if(tr[i]==null) continue;
     sum += tr[i];
     if(i>=period) sum -= tr[i-period];
     if(i>=period-1) out[i]=sum/period;
@@ -302,148 +296,27 @@ function ATR(ohlc, period){
   return out;
 }
 
-/** ===== Levels (Fib + ATR pullback) ===== **/
-function findSwing(candles){
-  // простой вариант: берём последний импульс как (low->high) за последние N баров
-  const N = Math.min(80, candles.length);
-  const slice = candles.slice(candles.length - N);
-  let low=Infinity, lowIdx=0;
-  for(let i=0;i<slice.length;i++){
-    const l=slice[i][3];
-    if(l<low){ low=l; lowIdx=i; }
-  }
-  let high=-Infinity, highIdx=lowIdx;
-  for(let i=lowIdx;i<slice.length;i++){
-    const h=slice[i][2];
-    if(h>high){ high=h; highIdx=i; }
-  }
-  return {
-    low, high,
-    lowTs: slice[lowIdx][0],
-    highTs: slice[highIdx][0],
-    dir: highIdx>lowIdx ? "up" : "flat"
-  };
-}
-
-function fibLevels(low, high){
-  const range = high - low;
-  return {
-    f382: high - range*0.382,
-    f50:  high - range*0.5,
-    f618: high - range*0.618,
-  };
-}
-
-/** ===== Strategy signal ===== **/
-function computeSignal({strategy, closes, maF, maS, rsi, atr, params}){
-  const last = closes.length-1;
-  const prev = last-1;
-
-  const lastClose = closes[last];
-  const rsiLast = rsi[last];
-  const atrLast = atr[last];
-
-  let signal = "NEUTRAL";
-  let stop=null, tp=null, note="";
-
-  if(strategy==="trend"){
-    const crossUp = prev>=0 && maF[prev]!=null && maS[prev]!=null && maF[last]!=null && maS[last]!=null
-      && (maF[prev] <= maS[prev]) && (maF[last] > maS[last]);
-    const crossDn = prev>=0 && maF[prev]!=null && maS[prev]!=null && maF[last]!=null && maS[last]!=null
-      && (maF[prev] >= maS[prev]) && (maF[last] < maS[last]);
-
-    if(crossUp && rsiLast!=null && rsiLast < params.buyRSI){
-      signal="BUY"; note="MA cross up + RSI ok";
-      if(atrLast!=null){ stop = lastClose - atrLast*params.stopX; tp = lastClose + atrLast*params.tpX; }
-    } else if(crossDn && rsiLast!=null && rsiLast > params.sellRSI){
-      signal="SELL"; note="MA cross down + RSI ok";
-      if(atrLast!=null){ stop = lastClose + atrLast*params.stopX; tp = lastClose - atrLast*params.tpX; }
-    } else {
-      note="Ждём пересечения/RSI фильтра";
-    }
-  }
-
-  if(strategy==="reversion"){
-    // mean reversion: BUY если RSI низкий, SELL если RSI высокий
-    if(rsiLast!=null && rsiLast < 30){
-      signal="BUY"; note="RSI oversold";
-      if(atrLast!=null){ stop = lastClose - atrLast*params.stopX; tp = lastClose + atrLast*(params.tpX*0.8); }
-    } else if(rsiLast!=null && rsiLast > 70){
-      signal="SELL"; note="RSI overbought";
-      if(atrLast!=null){ stop = lastClose + atrLast*params.stopX; tp = lastClose - atrLast*(params.tpX*0.8); }
-    } else {
-      note="RSI не в зоне экстремума";
-    }
-  }
-
-  if(strategy==="breakout"){
-    // breakout: если ATR растёт и цена выше MA slow -> BUY (упрощённо)
-    const atrPrev = prev>=0 ? atr[prev] : null;
-    const atrUp = atrLast!=null && atrPrev!=null && atrLast > atrPrev*1.1;
-    const above = maS[last]!=null && lastClose > maS[last];
-    const below = maS[last]!=null && lastClose < maS[last];
-
-    if(atrUp && above){
-      signal="BUY"; note="ATR expansion + above MA slow";
-      stop = atrLast!=null ? lastClose - atrLast*params.stopX : null;
-      tp   = atrLast!=null ? lastClose + atrLast*params.tpX : null;
-    } else if(atrUp && below){
-      signal="SELL"; note="ATR expansion + below MA slow";
-      stop = atrLast!=null ? lastClose + atrLast*params.stopX : null;
-      tp   = atrLast!=null ? lastClose - atrLast*params.tpX : null;
-    } else {
-      note="Нет импульса ATR";
-    }
-  }
-
-  return { signal, stop, tp, note, lastClose, rsiLast, atrLast };
-}
-
-/** ===== Simple position sim (localStorage) ===== **/
-const POS_KEY = "metals_pos_v1";
-function loadPos(){ try{ return JSON.parse(localStorage.getItem(POS_KEY)||"null"); }catch(e){ return null; } }
-function savePos(p){ localStorage.setItem(POS_KEY, JSON.stringify(p)); renderPos(); }
-function clearPos(){ localStorage.removeItem(POS_KEY); renderPos(); }
-
-function renderPos(){
-  const p = loadPos();
-  if(!p){ $("posBox").textContent = "FLAT"; return; }
-  $("posBox").textContent = `${p.side} | entry=${num(p.entry,2)} | size=${num(p.size,2)} | trail=${num(p.trail,2)} | realized=${num(p.realized,2)}`;
-}
-
-/** ===== Chart ===== **/
-function drawChart(canvas, candles, maF, maS, extraLines=[]){
+/** ===== Chart (simple canvas) ===== **/
+function drawChart(canvas, candles, maF, maS){
   const ctx = canvas.getContext("2d");
-  const w=canvas.width, h=canvas.height;
+  const w = canvas.width, h = canvas.height;
   ctx.clearRect(0,0,w,h);
 
-  const padL=60, padR=22, padT=18, padB=28;
-  const plotW=w-padL-padR, plotH=h-padT-padB;
+  const padL=50, padR=20, padT=18, padB=28;
+  const plotW = w-padL-padR, plotH=h-padT-padB;
 
   const closes = candles.map(x=>x[4]);
   const min = Math.min(...closes), max=Math.max(...closes);
   const y = (v)=> padT + (max-v)/(max-min||1)*plotH;
   const x = (i)=> padL + (i/(candles.length-1||1))*plotW;
 
-  // grid
+  ctx.globalAlpha=0.5;
   ctx.strokeStyle="rgba(255,255,255,.08)";
   for(let i=0;i<=4;i++){
     const yy = padT + (i/4)*plotH;
     ctx.beginPath(); ctx.moveTo(padL,yy); ctx.lineTo(w-padR,yy); ctx.stroke();
   }
-
-  // extra horizontal lines (levels)
-  for(const ln of extraLines){
-    if(ln.value==null || !isFinite(ln.value)) continue;
-    const yy = y(ln.value);
-    ctx.strokeStyle = ln.color || "rgba(255,209,102,.35)";
-    ctx.setLineDash([6,6]);
-    ctx.beginPath(); ctx.moveTo(padL,yy); ctx.lineTo(w-padR,yy); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(168,179,207,1)";
-    ctx.font="12px system-ui";
-    ctx.fillText(ln.label || "", padL+6, yy-6);
-  }
+  ctx.globalAlpha=1;
 
   // price
   ctx.strokeStyle="rgba(255,255,255,.85)";
@@ -452,99 +325,100 @@ function drawChart(canvas, candles, maF, maS, extraLines=[]){
   closes.forEach((c,i)=>{ const xx=x(i), yy=y(c); if(i===0) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
-  // MA fast
+  // MA fast (green)
   ctx.strokeStyle="rgba(59,214,113,.9)";
-  ctx.lineWidth=1.4;
+  ctx.lineWidth=1.5;
   ctx.beginPath();
-  for(let i=0;i<maF.length;i++){
-    if(maF[i]==null) continue;
-    const xx=x(i), yy=y(maF[i]);
-    if(i===0 || maF[i-1]==null) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy);
-  }
+  let startedF=false;
+  maF.forEach((v,i)=>{
+    if(v==null) return;
+    const xx=x(i), yy=y(v);
+    if(!startedF){ ctx.moveTo(xx,yy); startedF=true; } else ctx.lineTo(xx,yy);
+  });
   ctx.stroke();
 
-  // MA slow
+  // MA slow (red)
   ctx.strokeStyle="rgba(255,107,107,.9)";
-  ctx.lineWidth=1.4;
+  ctx.lineWidth=1.5;
   ctx.beginPath();
-  for(let i=0;i<maS.length;i++){
-    if(maS[i]==null) continue;
-    const xx=x(i), yy=y(maS[i]);
-    if(i===0 || maS[i-1]==null) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy);
-  }
+  let startedS=false;
+  maS.forEach((v,i)=>{
+    if(v==null) return;
+    const xx=x(i), yy=y(v);
+    if(!startedS){ ctx.moveTo(xx,yy); startedS=true; } else ctx.lineTo(xx,yy);
+  });
   ctx.stroke();
 
-  // y labels
   ctx.fillStyle="rgba(168,179,207,1)";
   ctx.font="12px system-ui";
-  ctx.fillText(num(max,2), 10, padT+10);
-  ctx.fillText(num(min,2), 10, padT+plotH);
+  ctx.fillText(num(max,2), 8, padT+10);
+  ctx.fillText(num(min,2), 8, padT+plotH);
 }
 
-/** ===== Main ===== **/
+/** ===== Main flow ===== **/
 async function loadAll(){
   setState("Загружаю свечи…", "status-warn");
   $("rows").innerHTML = `<tr><td colspan="6" class="small">загрузка…</td></tr>`;
+  $("signal").textContent = "—";
+  $("sigMeta").textContent = "—";
 
-  const symbol = $("asset").value;
-  const interval = $("tf").value;
+  const coinId = $("asset").value;
+  const interval = $("interval").value;
+  const days = Number($("days").value);
   const limit = Number($("limit").value);
 
-  const params = {
-    maFast: Math.max(2, Number($("maFast").value||9)),
-    maSlow: Math.max(3, Number($("maSlow").value||21)),
-    rsiP: Math.max(2, Number($("rsiP").value||14)),
-    atrP: Math.max(2, Number($("atrP").value||14)),
-    buyRSI: Number($("buyRSI").value||55),
-    sellRSI: Number($("sellRSI").value||65),
-    stopX: Number($("stopX").value||2),
-    tpX: Number($("tpX").value||3),
-    reX: Number($("reX").value||1.0),
-  };
-
-  if(params.maSlow <= params.maFast) params.maSlow = params.maFast + 1;
+  const maFast = Math.max(2, Number($("maFast").value||9));
+  const maSlow = Math.max(maFast+1, Number($("maSlow").value||21));
+  const rsiP = Math.max(2, Number($("rsiP").value||14));
+  const atrP = Math.max(2, Number($("atrP").value||14));
+  const buyRSI = Number($("buyRSI").value||55);
+  const sellRSI = Number($("sellRSI").value||65);
+  const stopX = Number($("stopX").value||2);
+  const tpX = Number($("tpX").value||3);
 
   try{
-    const ohlc = await fetchKlines(symbol, interval, limit);
-    const closes = ohlc.map(x=>x[4]);
+    const ohlc = await fetchKlines(coinId, interval, days, limit);
 
-    const maF = SMA(closes, params.maFast);
-    const maS = SMA(closes, params.maSlow);
-    const rsi = RSI(closes, params.rsiP);
-    const atr = ATR(ohlc, params.atrP);
+    const closes = ohlc.map(x=>x[4]);
+    const maF = SMA(closes, maFast);
+    const maS = SMA(closes, maSlow);
+    const rsi = RSI(closes, rsiP);
+    const atr = ATR(ohlc, atrP);
 
     const lastIdx = ohlc.length-1;
     const lastClose = closes[lastIdx];
-
-    $("last").textContent = num(lastClose,2);
+    $("last").textContent = num(lastClose,2) + " USD";
     $("ts").textContent = new Date().toLocaleString();
 
-    // levels
-    const swing = findSwing(ohlc);
-    const fib = fibLevels(swing.low, swing.high);
+    // signal
+    let signal = "NEUTRAL";
+    const prev = lastIdx-1;
+
+    const crossUp = prev>=0 && maF[prev]!=null && maS[prev]!=null && maF[lastIdx]!=null && maS[lastIdx]!=null
+      && (maF[prev] <= maS[prev]) && (maF[lastIdx] > maS[lastIdx]);
+
+    const crossDn = prev>=0 && maF[prev]!=null && maS[prev]!=null && maF[lastIdx]!=null && maS[lastIdx]!=null
+      && (maF[prev] >= maS[prev]) && (maF[lastIdx] < maS[lastIdx]);
+
+    const rsiLast = rsi[lastIdx];
     const atrLast = atr[lastIdx];
 
-    const re1 = (atrLast!=null) ? (lastClose - atrLast*params.reX) : null;
-    const re2 = (atrLast!=null) ? (lastClose - atrLast*params.reX*1.5) : null;
+    let stop = null, tp = null;
 
-    // signal
-    const strategy = $("strategy").value;
-    const sig = computeSignal({ strategy, closes, maF, maS, rsi, atr, params });
+    if(crossUp && rsiLast!=null && rsiLast < buyRSI){
+      signal = "BUY";
+      if(atrLast!=null){ stop = lastClose - atrLast*stopX; tp = lastClose + atrLast*tpX; }
+    } else if(crossDn && rsiLast!=null && rsiLast > sellRSI){
+      signal = "SELL";
+      if(atrLast!=null){ stop = lastClose + atrLast*stopX; tp = lastClose - atrLast*tpX; }
+    }
 
-    // UI signal
+    $("sigMeta").textContent = `${coinId} • ${interval} • days=${days} • bars=${ohlc.length}`;
     $("signal").textContent =
-      `Стратегия=${strategy.toUpperCase()} | Сигнал=${sig.signal} | Close=${num(sig.lastClose,2)} | RSI=${num(sig.rsiLast,1)} | ATR=${num(sig.atrLast,2)} | Stop≈${num(sig.stop,2)} | TP≈${num(sig.tp,2)} | ${sig.note}`;
+      `Сигнал: ${signal} · Close=${num(lastClose,2)} · RSI=${num(rsiLast,1)} · Stop≈${num(stop,2)} · TP≈${num(tp,2)} (ATR=${num(atrLast,2)})`;
 
-    const pill = $("sigPill");
-    pill.textContent = sig.signal;
-    pill.className = "pill " + (sig.signal==="BUY" ? "ok" : sig.signal==="SELL" ? "bad" : "warn");
-
-    $("levels").innerHTML =
-      `Fib: 0.382=${num(fib.f382,2)}, 0.5=${num(fib.f50,2)}, 0.618=${num(fib.f618,2)} |
-       Перезаход (ATR): L1=${num(re1,2)}, L2=${num(re2,2)} (reX=${params.reX})`;
-
-    // table last 12
-    const rows=[];
+    // table (last 12)
+    const rows = [];
     for(let i=Math.max(0,lastIdx-11); i<=lastIdx; i++){
       rows.push(`
         <tr>
@@ -559,108 +433,36 @@ async function loadAll(){
     }
     $("rows").innerHTML = rows.join("");
 
-    // position: trailing update
-    const pos = loadPos();
-    if(pos && sig.atrLast!=null){
-      // trail logic by ATR
-      const trailDist = sig.atrLast * params.stopX;
-      if(pos.side==="LONG"){
-        const newTrail = sig.lastClose - trailDist;
-        pos.trail = Math.max(pos.trail ?? -Infinity, newTrail);
-        if(sig.lastClose <= pos.trail){ pos.realized += (sig.lastClose - pos.entry) * pos.size; clearPos(); }
-        else savePos(pos);
-      } else if(pos.side==="SHORT"){
-        const newTrail = sig.lastClose + trailDist;
-        pos.trail = Math.min(pos.trail ?? Infinity, newTrail);
-        if(sig.lastClose >= pos.trail){ pos.realized += (pos.entry - sig.lastClose) * pos.size; clearPos(); }
-        else savePos(pos);
-      }
-      renderPos();
-    }
-
-    // draw
-    const extraLines = [
-      { value: fib.f382, label:"Fib 0.382", color:"rgba(255,209,102,.35)" },
-      { value: fib.f50,  label:"Fib 0.5",   color:"rgba(255,209,102,.35)" },
-      { value: fib.f618, label:"Fib 0.618", color:"rgba(255,209,102,.35)" },
-      { value: re1,      label:"Rebuy L1",  color:"rgba(59,214,113,.25)" },
-      { value: re2,      label:"Rebuy L2",  color:"rgba(59,214,113,.18)" },
-      { value: sig.stop, label:"Stop",      color:"rgba(255,107,107,.30)" },
-      { value: sig.tp,   label:"TP",        color:"rgba(59,214,113,.22)" },
-    ];
-    drawChart($("chart"), ohlc, maF, maS, extraLines);
-
-    setState("OK: klines через Worker (Binance) + spot через Worker", "status-ok");
+    drawChart($("chart"), ohlc, maF, maS);
+    setState("OK: свечи загружены через Worker (CoinGecko агрегация)", "status-ok");
   }catch(e){
     console.error(e);
-    setState("Ошибка: "+e.message, "status-bad");
-    $("signal").textContent="—";
-    $("levels").textContent="—";
+    setState("Ошибка загрузки: " + e.message, "status-bad");
+    $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
+    const ctx = $("chart").getContext("2d");
+    ctx.clearRect(0,0,$("chart").width,$("chart").height);
   }
 }
 
 function resetUI(){
-  $("ts").textContent="—";
-  $("last").textContent="—";
-  $("signal").textContent="—";
-  $("levels").textContent="—";
-  $("sigPill").textContent="—";
-  $("sigPill").className="pill";
+  $("ts").textContent = "—";
+  $("last").textContent = "—";
+  $("signal").textContent = "—";
+  $("sigMeta").textContent = "—";
   $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
-  const ctx=$("chart").getContext("2d");
+  const ctx = $("chart").getContext("2d");
   ctx.clearRect(0,0,$("chart").width,$("chart").height);
   setState("Сброшено", "");
-  renderPos();
 }
 
-/** ===== Position buttons ===== **/
-function enter(side){
-  // entry по последней цене (из UI)
-  const last = Number($("last").textContent);
-  if(!isFinite(last)) return;
-  const p = loadPos() || { realized: 0 };
-  const size = 1; // условно 1 “юнит”
-  savePos({ side, entry:last, size, trail:null, realized:p.realized||0 });
-}
-function take(tpFrac){
-  const pos = loadPos();
-  if(!pos) return;
-  const last = Number($("last").textContent);
-  if(!isFinite(last)) return;
-  const part = clamp(tpFrac, 0, 1);
-  const qty = pos.size * part;
-  if(qty<=0) return;
-
-  let pnl = 0;
-  if(pos.side==="LONG") pnl = (last - pos.entry) * qty;
-  if(pos.side==="SHORT") pnl = (pos.entry - last) * qty;
-
-  pos.realized = (pos.realized||0) + pnl;
-  pos.size = pos.size - qty;
-
-  if(pos.size <= 0.000001){
-    clearPos();
-  }else{
-    savePos(pos);
-  }
-}
-
-/** ===== Events ===== **/
 $("loadBtn").addEventListener("click", loadAll);
 $("resetBtn").addEventListener("click", resetUI);
 $("spotBtn").addEventListener("click", refreshSpot);
 
-$("enterLong").addEventListener("click", ()=>enter("LONG"));
-$("enterShort").addEventListener("click", ()=>enter("SHORT"));
-$("flatBtn").addEventListener("click", ()=>clearPos());
-
-$("tp25").addEventListener("click", ()=>take(0.25));
-$("tp50").addEventListener("click", ()=>take(0.50));
-$("tp75").addEventListener("click", ()=>take(0.75));
-
-/** старт **/
+// старт
 resetUI();
 refreshSpot();
+loadAll();
 </script>
 </body>
 </html>
