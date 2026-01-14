@@ -210,6 +210,39 @@ function tsToStr(ms){ return new Date(ms).toLocaleString(); }
 // ==== твой API Worker ====
 const API_BASE = "https://api-metals.analysisswim.workers.dev";
 
+  async function loadRatio(){
+  try{
+    const r = await fetch(`${API_BASE}/api/ratio/gold-silver`, {
+      cache: "no-store"
+    });
+
+    const ct = r.headers.get("content-type") || "";
+    if(!ct.includes("application/json")){
+      const raw = await r.text();
+      throw new Error("Ratio not JSON: " + raw.slice(0,120));
+    }
+
+    const j = await r.json();
+    if(j?.ratio == null) throw new Error("ratio missing");
+
+    $("ratio").textContent = j.ratio.toFixed(2);
+
+    if(j.ratio > 80){
+      $("ratioSignal").textContent = "🟢 Серебро сильно недооценено (потенциал роста)";
+    } else if(j.ratio < 60){
+      $("ratioSignal").textContent = "🔴 Серебро перекуплено (осторожно)";
+    } else {
+      $("ratioSignal").textContent = "⚪ Нормальный диапазон";
+    }
+
+  }catch(e){
+    console.error(e);
+    $("ratio").textContent = "—";
+    $("ratioSignal").textContent = "Ошибка загрузки ratio";
+  }
+}
+
+
 // ===== FX =====
 let FX_USD_SGD = 1;
 async function refreshFx(){
@@ -267,6 +300,21 @@ async function refreshSpot(){
     setState("Spot ошибка: " + e.message, "status-bad");
   }
 }
+  
+  <div class="box" style="margin-bottom:12px">
+  <div style="font-weight:700;margin-bottom:6px">
+    Gold / Silver Ratio
+  </div>
+
+  <div class="kpi" style="font-size:18px">
+    <span id="ratio">—</span>
+  </div>
+
+  <div class="small" id="ratioSignal" style="margin-top:6px">
+    —
+  </div>
+</div>
+
 
 // ===== Klines (Kraken через Worker) =====
 async function fetchKlines(pair, days=30, limit=200){
@@ -537,8 +585,9 @@ $("spotBtn").addEventListener("click", async ()=>{ await refreshFx(); await refr
 $("ccy").addEventListener("change", async ()=>{ await refreshFx(); await refreshSpot(); if(LAST_SERIES) loadAll(); });
 
 // старт
-bindHover();
 resetUI();
+refreshSpot();
+loadRatio();
 (async ()=>{
   await refreshFx();
   await refreshSpot();
