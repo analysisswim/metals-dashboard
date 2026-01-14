@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gold/Silver Dashboard — график + сигналы + PnL</title>
+  <title>Металлы — график + сигналы + Spot USD/SGD</title>
   <style>
     :root{
       --bg:#0b1220; --text:#e7eefc; --muted:#a8b3cf;
@@ -41,20 +41,33 @@
     .kpi{font-variant-numeric:tabular-nums}
     .box{background:rgba(0,0,0,.15); border:1px solid var(--line); border-radius:14px; padding:12px}
     .status-ok{color:var(--ok)} .status-bad{color:var(--bad)} .status-warn{color:var(--warn)}
-    #chart{width:100%; height:420px; border-radius:14px; background:rgba(0,0,0,.18);
-      border:1px solid var(--line); display:block}
+    .pill{display:inline-block;padding:3px 10px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--muted)}
+    .chartWrap{position:relative}
+    #chart{
+      width:100%; height:420px; border-radius:14px; background:rgba(0,0,0,.18);
+      border:1px solid var(--line); display:block
+    }
+    #tip{
+      position:absolute; pointer-events:none; display:none;
+      background:rgba(10,16,28,.92); border:1px solid rgba(255,255,255,.10);
+      color:var(--text); padding:8px 10px; border-radius:10px;
+      font-size:12px; box-shadow:0 10px 30px rgba(0,0,0,.4);
+      transform: translate(12px, -12px);
+      max-width: 240px;
+      z-index: 10;
+      white-space: nowrap;
+    }
     table{width:100%;border-collapse:collapse;font-size:12px}
     th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}
     th{color:#c7d2f0;font-weight:600}
-    .pill{display:inline-block;padding:3px 10px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--muted)}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1 class="title">Gold/Silver Dashboard — график + сигналы + PnL</h1>
+  <h1 class="title">Металлы — график + сигналы (MA/RSI/ATR) + Spot USD/SGD</h1>
   <p class="sub">
-    Spot XAU/XAG берём через твой Worker (<b>/api/summary</b>), графики берём через <b>/api/klines</b> (основной: Kraken).
-    CoinGecko может давать <b>429</b> — это лимит, не твоя ошибка.
+    Свечи берём через твой Worker <b>/api/klines</b> (Kraken). Spot XAU/XAG + SGD + GSR берём через <b>/api/summary</b>.
+    Наведи мышью на график — увидишь цену и время.
   </p>
 
   <div class="grid">
@@ -65,8 +78,10 @@
           <div>
             <label>Актив (график)</label>
             <select id="asset">
-              <option value="PAXGUSD">PAXGUSD (Kraken)</option>
-              <option value="XAUTUSD">XAUTUSD (Kraken)</option>
+              <option value="PAXGUSD">PAXGUSD (Pax Gold)</option>
+              <option value="XAUTUSD">XAUTUSD (Tether Gold)</option>
+              <option value="XAUUSD">XAUUSD (Gold spot)</option>
+              <option value="XAGUSD">XAGUSD (Silver spot)</option>
             </select>
           </div>
           <div>
@@ -108,11 +123,16 @@
         <div class="small">Последняя цена: <span id="last" class="kpi">—</span></div>
       </div>
 
-      <canvas id="chart" width="1200" height="420"></canvas>
+      <div class="chartWrap">
+        <canvas id="chart" width="1200" height="420"></canvas>
+        <div id="tip"></div>
+      </div>
 
       <p class="small" style="margin:10px 0 0">
-        Сигнал: MAfast/MAslow + RSI фильтр, стоп/TP по ATR. Это “подсказка”, не гарантия.
+        BUY: MAfast пересекает MAslow вверх и RSI &lt; buyRSI. SELL: пересечение вниз и RSI &gt; sellRSI.
+        Stop/TP = ATR × множители.
       </p>
+      <div class="small" style="margin-top:6px">Hover: <span id="hoverInfo">—</span></div>
     </div>
 
     <!-- RIGHT -->
@@ -120,7 +140,7 @@
       <div class="box" style="margin-bottom:12px">
         <div class="row space">
           <div>
-            <div style="font-weight:700">Spot (через Worker summary)</div>
+            <div style="font-weight:700">Spot (XAU / XAG) + SGD + GSR</div>
             <div class="small">
               XAUUSD: <span id="spotXAU" class="kpi">—</span>
               <span class="pill" id="spotXAUsgd">—</span>
@@ -130,7 +150,8 @@
               <span class="pill" id="spotXAGsgd">—</span>
             </div>
             <div class="small">GSR (Gold/Silver): <span id="gsr" class="kpi">—</span></div>
-            <div class="small">FX USD→SGD: <span id="fx" class="kpi">—</span> · Источник: <span id="spotSrc">—</span></div>
+            <div class="small">FX USD→SGD: <span id="fx" class="kpi">—</span></div>
+            <div class="small">Источник: <span id="spotSrc">—</span></div>
           </div>
           <button id="spotBtn">Обновить</button>
         </div>
@@ -159,27 +180,14 @@
       </div>
 
       <div class="box" style="margin-bottom:12px">
-        <div style="font-weight:700;margin-bottom:8px">Сделки (PnL)</div>
-        <div class="small">Введи покупки/продажи (цена и количество). Считаем PnL по FIFO. Сохраняется в браузере.</div>
-        <div class="row" style="margin-top:10px">
-          <select id="side">
-            <option value="BUY">BUY</option>
-            <option value="SELL">SELL</option>
-          </select>
-          <input id="tPrice" type="number" step="0.0001" placeholder="Price" />
-          <input id="tQty" type="number" step="0.0001" placeholder="Qty" />
-          <button id="addTrade">Добавить</button>
-          <button id="clearTrades">Очистить</button>
-        </div>
-        <div style="max-height:160px;overflow:auto;border-radius:12px;margin-top:10px">
+        <div style="font-weight:700;margin-bottom:8px">Последние бары (индикаторы)</div>
+        <div style="max-height:240px;overflow:auto;border-radius:12px">
           <table>
-            <thead><tr><th>#</th><th>Side</th><th>Price</th><th>Qty</th></tr></thead>
-            <tbody id="tradesBody"><tr><td colspan="4" class="small">—</td></tr></tbody>
+            <thead><tr>
+              <th>Время</th><th>Close</th><th>MAf</th><th>MAs</th><th>RSI</th><th>ATR</th>
+            </tr></thead>
+            <tbody id="rows"><tr><td colspan="6" class="small">—</td></tr></tbody>
           </table>
-        </div>
-        <div class="row space" style="margin-top:10px">
-          <div class="small">Остаток позиции: <span id="posLeft" class="kpi">—</span></div>
-          <div class="small">PnL (realized): <span id="pnl" class="kpi">—</span></div>
         </div>
       </div>
 
@@ -194,7 +202,6 @@
 <script>
 const $ = (id)=>document.getElementById(id);
 const num = (v, d=2)=> (v==null || !isFinite(v)) ? "—" : Number(v).toFixed(d);
-
 function setState(msg, cls=""){
   const el = $("state");
   el.className = "small " + cls;
@@ -202,14 +209,14 @@ function setState(msg, cls=""){
 }
 function tsToStr(ms){ return new Date(ms).toLocaleString(); }
 
-// ==== ТВОЙ Worker домен ====
+// ====== твой Worker домен ======
 const API_BASE = "https://api-metals.analysisswim.workers.dev";
 
 // --------------------
-// Spot + FX + Ratio
+// Spot + SGD + GSR
 // --------------------
 async function refreshSummary(){
-  setState("Обновляю spot/fx…", "status-warn");
+  setState("Обновляю spot/SGD…", "status-warn");
   try{
     const r = await fetch(`${API_BASE}/api/summary?to=SGD`, { cache:"no-store" });
     const ct = (r.headers.get("content-type")||"");
@@ -220,12 +227,12 @@ async function refreshSummary(){
     const xau = data?.spot?.XAUUSD;
     const xag = data?.spot?.XAGUSD;
     const gsr = data?.spot?.GSR;
+    const fx = data?.fx?.rate;
 
     $("spotXAU").textContent = num(xau,2) + " USD";
     $("spotXAG").textContent = num(xag,3) + " USD";
     $("gsr").textContent = num(gsr,2);
 
-    const fx = data?.fx?.rate;
     $("fx").textContent = fx ? ("1 USD = " + num(fx,4) + " SGD") : "—";
     $("spotSrc").textContent = data?.spot?.source || "—";
 
@@ -237,17 +244,17 @@ async function refreshSummary(){
       $("spotXAGsgd").textContent = "—";
     }
 
-    setState("OK: spot/fx обновлены", "status-ok");
+    setState("OK: spot/SGD обновлены", "status-ok");
   }catch(e){
     console.error(e);
-    setState("Spot/Fx ошибка: " + e.message, "status-bad");
+    setState("Spot/SGD ошибка: " + e.message, "status-bad");
   }
 }
 
 // --------------------
-// Klines (Kraken)
+// Klines (Kraken через Worker)
 // --------------------
-async function fetchKlinesKraken(pair, days=30, interval=60, limit=200){
+async function fetchKlines(pair, days=30, interval=60, limit=200){
   const url =
     `${API_BASE}/api/klines?market=kraken` +
     `&pair=${encodeURIComponent(pair)}` +
@@ -319,8 +326,11 @@ function ATR(ohlc, period){
 }
 
 // --------------------
-// Chart (canvas)
-—function drawChart(canvas, candles, maF, maS){
+// Chart + Hover tooltip
+// --------------------
+let __chartState = null;
+
+function drawChart(canvas, candles, maF, maS){
   const ctx = canvas.getContext("2d");
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0,0,w,h);
@@ -333,6 +343,10 @@ function ATR(ohlc, period){
   const y = (v)=> padT + (max-v)/(max-min||1)*plotH;
   const x = (i)=> padL + (i/(candles.length-1||1))*plotW;
 
+  // save for hover
+  __chartState = { candles, maF, maS, padL, padR, padT, padB, plotW, plotH, min, max, x, y, w, h };
+
+  // grid
   ctx.globalAlpha=0.5;
   ctx.strokeStyle="rgba(255,255,255,.08)";
   for(let i=0;i<=4;i++){
@@ -341,39 +355,71 @@ function ATR(ohlc, period){
   }
   ctx.globalAlpha=1;
 
+  // price
   ctx.strokeStyle="rgba(255,255,255,.85)";
   ctx.lineWidth=1.2;
   ctx.beginPath();
   closes.forEach((c,i)=>{ const xx=x(i), yy=y(c); if(i===0) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
+  // MA fast
   ctx.strokeStyle="rgba(59,214,113,.9)";
   ctx.lineWidth=1.5;
   ctx.beginPath();
-  let startedF=false;
-  maF.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!startedF){ctx.moveTo(xx,yy); startedF=true;} else ctx.lineTo(xx,yy); });
+  let sf=false;
+  maF.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!sf){ctx.moveTo(xx,yy); sf=true;} else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
+  // MA slow
   ctx.strokeStyle="rgba(255,107,107,.9)";
   ctx.lineWidth=1.5;
   ctx.beginPath();
-  let startedS=false;
-  maS.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!startedS){ctx.moveTo(xx,yy); startedS=true;} else ctx.lineTo(xx,yy); });
+  let ss=false;
+  maS.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!ss){ctx.moveTo(xx,yy); ss=true;} else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
+  // labels
   ctx.fillStyle="rgba(168,179,207,1)";
   ctx.font="12px system-ui";
   ctx.fillText(num(max,2), 8, padT+10);
   ctx.fillText(num(min,2), 8, padT+plotH);
 }
 
+function drawHoverLine(canvas, idx){
+  if(!__chartState) return;
+  const ctx = canvas.getContext("2d");
+  const { x, padT, plotH, candles } = __chartState;
+
+  // redraw base (cheap way: just redraw full chart)
+  // (вместо сложного слоя — так проще и стабильно)
+  const { candles: c, maF, maS } = __chartState;
+  drawChart(canvas, c, maF, maS);
+
+  const xx = x(idx);
+  ctx.strokeStyle="rgba(255,255,255,.18)";
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(xx, padT);
+  ctx.lineTo(xx, padT + plotH);
+  ctx.stroke();
+
+  // dot on close
+  const close = candles[idx][4];
+  const yy = __chartState.y(close);
+  ctx.fillStyle="rgba(255,255,255,.85)";
+  ctx.beginPath();
+  ctx.arc(xx, yy, 3.5, 0, Math.PI*2);
+  ctx.fill();
+}
+
 // --------------------
-// Main Load
+// Main
 // --------------------
 async function loadAll(){
-  setState("Загружаю klines (Kraken)…", "status-warn");
+  setState("Загружаю klines…", "status-warn");
+  $("rows").innerHTML = `<tr><td colspan="6" class="small">загрузка…</td></tr>`;
 
-  const pair = $("asset").value; // PAXGUSD / XAUTUSD
+  const pair = $("asset").value;
   const days = Number($("days").value);
   const limit = Number($("limit").value);
   const interval = Number($("interval").value);
@@ -388,7 +434,7 @@ async function loadAll(){
   const tpX = Number($("tpX").value||3);
 
   try{
-    const ohlc = await fetchKlinesKraken(pair, days, interval, limit);
+    const ohlc = await fetchKlines(pair, days, interval, limit);
 
     const closes = ohlc.map(x=>x[4]);
     const maF = SMA(closes, maFast);
@@ -401,6 +447,8 @@ async function loadAll(){
     $("last").textContent = num(lastClose,2) + " USD";
     $("ts").textContent = new Date().toLocaleString();
 
+    // signal
+    let signal = "NEUTRAL";
     const prev = lastIdx-1;
     const crossUp = prev>=0 && maF[prev]!=null && maS[prev]!=null && maF[lastIdx]!=null && maS[lastIdx]!=null
       && (maF[prev] <= maS[prev]) && (maF[lastIdx] > maS[lastIdx]);
@@ -409,25 +457,43 @@ async function loadAll(){
 
     const rsiLast = rsi[lastIdx];
     const atrLast = atr[lastIdx];
+    let stop=null, tp=null;
 
-    let signal = "NEUTRAL", stop=null, tp=null;
     if(crossUp && rsiLast!=null && rsiLast < buyRSI){
       signal="BUY";
-      if(atrLast!=null){ stop=lastClose-atrLast*stopX; tp=lastClose+atrLast*tpX; }
+      if(atrLast!=null){ stop = lastClose - atrLast*stopX; tp = lastClose + atrLast*tpX; }
     } else if(crossDn && rsiLast!=null && rsiLast > sellRSI){
       signal="SELL";
-      if(atrLast!=null){ stop=lastClose+atrLast*stopX; tp=lastClose-atrLast*tpX; }
+      if(atrLast!=null){ stop = lastClose + atrLast*stopX; tp = lastClose - atrLast*tpX; }
     }
 
     $("signal").textContent =
       `Сигнал: ${signal} · Close=${num(lastClose,2)} · RSI=${num(rsiLast,1)} · Stop≈${num(stop,2)} · TP≈${num(tp,2)} (ATR=${num(atrLast,2)})`;
 
+    // table last 12
+    const rows = [];
+    for(let i=Math.max(0,lastIdx-11); i<=lastIdx; i++){
+      rows.push(`
+        <tr>
+          <td>${tsToStr(ohlc[i][0])}</td>
+          <td>${num(closes[i],2)}</td>
+          <td>${num(maF[i],2)}</td>
+          <td>${num(maS[i],2)}</td>
+          <td>${num(rsi[i],1)}</td>
+          <td>${num(atr[i],2)}</td>
+        </tr>
+      `);
+    }
+    $("rows").innerHTML = rows.join("");
+
     drawChart($("chart"), ohlc, maF, maS);
-    setState("OK: klines получены (Kraken)", "status-ok");
+    $("hoverInfo").textContent = "Наведи курсор на график";
+    setState("OK: klines загружены", "status-ok");
   }catch(e){
     console.error(e);
-    setState("Ошибка klines: " + e.message, "status-bad");
+    setState("Ошибка загрузки: " + e.message, "status-bad");
     $("signal").textContent = "—";
+    $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
   }
 }
 
@@ -435,76 +501,54 @@ function resetUI(){
   $("ts").textContent = "—";
   $("last").textContent = "—";
   $("signal").textContent = "—";
+  $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
+  $("hoverInfo").textContent = "—";
   const ctx = $("chart").getContext("2d");
   ctx.clearRect(0,0,$("chart").width,$("chart").height);
+  __chartState = null;
   setState("Сброшено", "");
 }
 
-// --------------------
-// Trades PnL (FIFO) + localStorage
-// --------------------
-const LS_KEY = "metals_trades_v1";
-function loadTrades(){
-  try{ return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); }catch(_){ return []; }
-}
-function saveTrades(t){ localStorage.setItem(LS_KEY, JSON.stringify(t)); }
+// hover handlers
+(function initHover(){
+  const canvas = $("chart");
+  const tip = $("tip");
 
-function renderTrades(){
-  const trades = loadTrades();
-  if(!trades.length){
-    $("tradesBody").innerHTML = `<tr><td colspan="4" class="small">—</td></tr>`;
-    $("posLeft").textContent = "—";
-    $("pnl").textContent = "—";
-    return;
-  }
-  $("tradesBody").innerHTML = trades.map((t,i)=>`
-    <tr><td>${i+1}</td><td>${t.side}</td><td>${Number(t.price).toFixed(4)}</td><td>${Number(t.qty).toFixed(4)}</td></tr>
-  `).join("");
+  canvas.addEventListener("mousemove", (e)=>{
+    if(!__chartState) return;
 
-  // FIFO calc
-  const lots = [];
-  let realized = 0;
-  for(const t of trades){
-    const p = Number(t.price), q = Number(t.qty);
-    if(t.side==="BUY"){
-      lots.push({price:p, qty:q});
-    } else {
-      let sellQty = q;
-      while(sellQty>1e-12 && lots.length){
-        const lot = lots[0];
-        const used = Math.min(lot.qty, sellQty);
-        realized += (p - lot.price) * used;
-        lot.qty -= used;
-        sellQty -= used;
-        if(lot.qty<=1e-12) lots.shift();
-      }
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+
+    const { padL, plotW, candles } = __chartState;
+    const n = candles.length;
+    const t = (mx - padL) / (plotW || 1);
+    const idx = Math.max(0, Math.min(n-1, Math.round(t*(n-1))));
+
+    const [ts, o,h,l,c] = candles[idx];
+
+    drawHoverLine(canvas, idx);
+
+    const html = `${new Date(ts).toLocaleString()} · Close=${num(c,2)}`;
+    $("hoverInfo").textContent = html;
+
+    tip.style.display = "block";
+    tip.textContent = html;
+    tip.style.left = (e.clientX - rect.left) + "px";
+    tip.style.top  = (e.clientY - rect.top) + "px";
+  });
+
+  canvas.addEventListener("mouseleave", ()=>{
+    tip.style.display = "none";
+    if(__chartState){
+      const { candles, maF, maS } = __chartState;
+      drawChart(canvas, candles, maF, maS);
     }
-  }
-  const left = lots.reduce((a,b)=>a+b.qty,0);
-  $("posLeft").textContent = left.toFixed(4);
-  $("pnl").textContent = realized.toFixed(2) + " USD";
-}
+    $("hoverInfo").textContent = "—";
+  });
+})();
 
-$("addTrade").addEventListener("click", ()=>{
-  const side = $("side").value;
-  const price = Number($("tPrice").value);
-  const qty = Number($("tQty").value);
-  if(!Number.isFinite(price) || !Number.isFinite(qty) || qty<=0) return;
-
-  const trades = loadTrades();
-  trades.push({side, price, qty});
-  saveTrades(trades);
-  $("tPrice").value = "";
-  $("tQty").value = "";
-  renderTrades();
-});
-
-$("clearTrades").addEventListener("click", ()=>{
-  saveTrades([]);
-  renderTrades();
-});
-
-// --------------------
+// buttons
 $("loadBtn").addEventListener("click", loadAll);
 $("resetBtn").addEventListener("click", resetUI);
 $("spotBtn").addEventListener("click", refreshSummary);
@@ -512,7 +556,6 @@ $("spotBtn").addEventListener("click", refreshSummary);
 // старт
 resetUI();
 refreshSummary();
-renderTrades();
 </script>
 </body>
 </html>
