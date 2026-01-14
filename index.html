@@ -3,22 +3,26 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Металлы/токены — график + сигналы (MA/RSI/ATR)</title>
+  <title>Gold/Silver Dashboard — график + сигналы + PnL</title>
   <style>
     :root{
       --bg:#0b1220; --text:#e7eefc; --muted:#a8b3cf;
       --line:rgba(255,255,255,.08); --btn:#1b2540;
       --ok:#3bd671; --bad:#ff6b6b; --warn:#ffd166;
+      --card:rgba(255,255,255,.03);
     }
     html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
-    .wrap{max-width:1200px;margin:18px auto;padding:0 14px}
+    .wrap{max-width:1220px;margin:18px auto;padding:0 14px}
     .title{font-size:18px;margin:0 0 6px}
     .sub{color:var(--muted);font-size:13px;margin:0 0 14px;line-height:1.35}
-    .grid{display:grid;grid-template-columns: 1.4fr .8fr; gap:14px}
+    .grid{display:grid;grid-template-columns: 1.35fr .85fr; gap:14px}
     @media(max-width:980px){.grid{grid-template-columns:1fr}}
-    .card{background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
-      border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow:0 12px 40px rgba(0,0,0,.35)}
+    .card{
+      background:linear-gradient(180deg, var(--card), rgba(255,255,255,.01));
+      border:1px solid var(--line); border-radius:16px; padding:14px;
+      box-shadow:0 12px 40px rgba(0,0,0,.35)
+    }
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     .row.space{justify-content:space-between}
     label{font-size:12px;color:var(--muted);display:block;margin:0 0 6px}
@@ -32,30 +36,25 @@
       background:var(--btn); color:#fff; border:1px solid var(--line);
       border-radius:12px; padding:10px 12px; cursor:pointer
     }
-    button[disabled]{opacity:.55;cursor:not-allowed}
     button:hover{filter:brightness(1.08)}
     .small{font-size:12px;color:var(--muted)}
     .kpi{font-variant-numeric:tabular-nums}
     .box{background:rgba(0,0,0,.15); border:1px solid var(--line); border-radius:14px; padding:12px}
     .status-ok{color:var(--ok)} .status-bad{color:var(--bad)} .status-warn{color:var(--warn)}
-    #chartWrap{position:relative}
     #chart{width:100%; height:420px; border-radius:14px; background:rgba(0,0,0,.18);
       border:1px solid var(--line); display:block}
-    #overlay{
-      position:absolute; inset:0; display:none; align-items:center; justify-content:center;
-      background:rgba(0,0,0,.28); border-radius:14px; font-size:13px; color:var(--muted);
-    }
     table{width:100%;border-collapse:collapse;font-size:12px}
     th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}
     th{color:#c7d2f0;font-weight:600}
+    .pill{display:inline-block;padding:3px 10px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--muted)}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1 class="title">Металлы/токены — график + сигналы (MA/RSI/ATR)</h1>
+  <h1 class="title">Gold/Silver Dashboard — график + сигналы + PnL</h1>
   <p class="sub">
-    Свечи берём через твой Worker <b>/api/klines (Kraken)</b>, spot XAU/XAG через <b>/api/spot</b>.
-    SGD считается через <b>/api/fx USD→SGD</b>.
+    Spot XAU/XAG берём через твой Worker (<b>/api/summary</b>), графики берём через <b>/api/klines</b> (основной: Kraken).
+    CoinGecko может давать <b>429</b> — это лимит, не твоя ошибка.
   </p>
 
   <div class="grid">
@@ -66,27 +65,35 @@
           <div>
             <label>Актив (график)</label>
             <select id="asset">
-              <option value="XAUTUSD">XAUt (Kraken: XAUTUSD)</option>
-              <option value="PAXGUSD" selected>PAXG (Kraken: PAXGUSD)</option>
+              <option value="PAXGUSD">PAXGUSD (Kraken)</option>
+              <option value="XAUTUSD">XAUTUSD (Kraken)</option>
             </select>
           </div>
           <div>
-            <label>Таймфрейм (days)</label>
+            <label>Days</label>
             <select id="days">
-              <option value="7">7 дней</option>
-              <option value="30" selected>30 дней</option>
-              <option value="90">90 дней</option>
-              <option value="180">180 дней</option>
-              <option value="365">365 дней</option>
+              <option value="7">7</option>
+              <option value="30" selected>30</option>
+              <option value="90">90</option>
+              <option value="180">180</option>
             </select>
           </div>
           <div>
-            <label>Глубина (баров)</label>
+            <label>Interval (мин)</label>
+            <select id="interval">
+              <option value="15">15</option>
+              <option value="60" selected>60</option>
+              <option value="240">240</option>
+              <option value="1440">1440 (1D)</option>
+            </select>
+          </div>
+          <div>
+            <label>Limit</label>
             <select id="limit">
               <option value="100">100</option>
               <option value="200" selected>200</option>
               <option value="365">365</option>
-              <option value="700">700</option>
+              <option value="720">720</option>
             </select>
           </div>
         </div>
@@ -98,17 +105,13 @@
 
       <div class="row space" style="margin:10px 0 8px">
         <div class="small">Обновлено: <span id="ts">—</span></div>
-        <div class="small">Последняя цена (из свечей): <span id="last" class="kpi">—</span></div>
+        <div class="small">Последняя цена: <span id="last" class="kpi">—</span></div>
       </div>
 
-      <div id="chartWrap">
-        <canvas id="chart" width="1200" height="420"></canvas>
-        <div id="overlay">Загрузка данных…</div>
-      </div>
+      <canvas id="chart" width="1200" height="420"></canvas>
 
       <p class="small" style="margin:10px 0 0">
-        BUY: MAfast пересекает MAslow вверх и RSI &lt; buyRSI. SELL: пересечение вниз и RSI &gt; sellRSI.
-        Stop/TP = ATR × множители.
+        Сигнал: MAfast/MAslow + RSI фильтр, стоп/TP по ATR. Это “подсказка”, не гарантия.
       </p>
     </div>
 
@@ -117,18 +120,19 @@
       <div class="box" style="margin-bottom:12px">
         <div class="row space">
           <div>
-            <div style="font-weight:700">Spot (через Worker)</div>
+            <div style="font-weight:700">Spot (через Worker summary)</div>
             <div class="small">
-              XAUUSD: <span id="spotXAU" class="kpi">—</span> · XAGUSD: <span id="spotXAG" class="kpi">—</span>
+              XAUUSD: <span id="spotXAU" class="kpi">—</span>
+              <span class="pill" id="spotXAUsgd">—</span>
             </div>
             <div class="small">
-              XAU SGD: <span id="spotXAU_SGD" class="kpi">—</span> · XAG SGD: <span id="spotXAG_SGD" class="kpi">—</span>
+              XAGUSD: <span id="spotXAG" class="kpi">—</span>
+              <span class="pill" id="spotXAGsgd">—</span>
             </div>
-            <div class="small">
-              FX USD→SGD: <span id="fxUSDSGD" class="kpi">—</span> · Источник: <span id="spotSrc">—</span>
-            </div>
+            <div class="small">GSR (Gold/Silver): <span id="gsr" class="kpi">—</span></div>
+            <div class="small">FX USD→SGD: <span id="fx" class="kpi">—</span> · Источник: <span id="spotSrc">—</span></div>
           </div>
-          <button id="spotBtn">Обновить spot</button>
+          <button id="spotBtn">Обновить</button>
         </div>
       </div>
 
@@ -155,14 +159,27 @@
       </div>
 
       <div class="box" style="margin-bottom:12px">
-        <div style="font-weight:700;margin-bottom:8px">Последние бары (индикаторы)</div>
-        <div style="max-height:240px;overflow:auto;border-radius:12px">
+        <div style="font-weight:700;margin-bottom:8px">Сделки (PnL)</div>
+        <div class="small">Введи покупки/продажи (цена и количество). Считаем PnL по FIFO. Сохраняется в браузере.</div>
+        <div class="row" style="margin-top:10px">
+          <select id="side">
+            <option value="BUY">BUY</option>
+            <option value="SELL">SELL</option>
+          </select>
+          <input id="tPrice" type="number" step="0.0001" placeholder="Price" />
+          <input id="tQty" type="number" step="0.0001" placeholder="Qty" />
+          <button id="addTrade">Добавить</button>
+          <button id="clearTrades">Очистить</button>
+        </div>
+        <div style="max-height:160px;overflow:auto;border-radius:12px;margin-top:10px">
           <table>
-            <thead><tr>
-              <th>Время</th><th>Close</th><th>MAf</th><th>MAs</th><th>RSI</th><th>ATR</th>
-            </tr></thead>
-            <tbody id="rows"><tr><td colspan="6" class="small">—</td></tr></tbody>
+            <thead><tr><th>#</th><th>Side</th><th>Price</th><th>Qty</th></tr></thead>
+            <tbody id="tradesBody"><tr><td colspan="4" class="small">—</td></tr></tbody>
           </table>
+        </div>
+        <div class="row space" style="margin-top:10px">
+          <div class="small">Остаток позиции: <span id="posLeft" class="kpi">—</span></div>
+          <div class="small">PnL (realized): <span id="pnl" class="kpi">—</span></div>
         </div>
       </div>
 
@@ -175,79 +192,62 @@
 </div>
 
 <script>
-/** ===== Helpers ===== **/
 const $ = (id)=>document.getElementById(id);
 const num = (v, d=2)=> (v==null || !isFinite(v)) ? "—" : Number(v).toFixed(d);
+
 function setState(msg, cls=""){
   const el = $("state");
   el.className = "small " + cls;
   el.textContent = msg;
 }
 function tsToStr(ms){ return new Date(ms).toLocaleString(); }
-function setOverlay(on){
-  $("overlay").style.display = on ? "flex" : "none";
-}
 
-/** ===== API base (твоя рабочая ссылка) ===== **/
+// ==== ТВОЙ Worker домен ====
 const API_BASE = "https://api-metals.analysisswim.workers.dev";
 
-/** ===== Spot + FX ===== **/
-async function fetchJSON(url){
-  const r = await fetch(url, { cache: "no-store" });
-  const ct = (r.headers.get("content-type") || "");
-  if (!ct.includes("application/json")) {
-    const raw = await r.text();
-    throw new Error("Not JSON: " + raw.slice(0,160));
-  }
-  const j = await r.json();
-  return { r, j };
-}
-
-async function fetchSpot(symbol){
-  const { j } = await fetchJSON(`${API_BASE}/api/spot?symbol=${encodeURIComponent(symbol)}`);
-  if (!j?.ok || j.price == null) throw new Error("Spot bad payload");
-  return j; // {ok,symbol,price,currency,ts,source}
-}
-
-async function fetchFX(from="USD", to="SGD"){
-  const { j } = await fetchJSON(`${API_BASE}/api/fx?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-  if (!j?.ok || j.rate == null) throw new Error("FX bad payload");
-  return j; // {ok,from,to,rate,date,source}
-}
-
-async function refreshSpot(){
-  $("spotBtn").disabled = true;
+// --------------------
+// Spot + FX + Ratio
+// --------------------
+async function refreshSummary(){
+  setState("Обновляю spot/fx…", "status-warn");
   try{
-    setState("Обновляю spot + FX…", "status-warn");
-    const [xau, xag, fx] = await Promise.all([
-      fetchSpot("XAUUSD"),
-      fetchSpot("XAGUSD"),
-      fetchFX("USD","SGD"),
-    ]);
+    const r = await fetch(`${API_BASE}/api/summary?to=SGD`, { cache:"no-store" });
+    const ct = (r.headers.get("content-type")||"");
+    if(!ct.includes("application/json")) throw new Error("summary not JSON");
+    const data = await r.json();
+    if(!data.ok) throw new Error(data.error || "summary error");
 
-    const rate = Number(fx.rate);
-    $("fxUSDSGD").textContent = `${num(rate,4)}`;
+    const xau = data?.spot?.XAUUSD;
+    const xag = data?.spot?.XAGUSD;
+    const gsr = data?.spot?.GSR;
 
-    $("spotXAU").textContent = `${num(xau.price, 2)} USD`;
-    $("spotXAG").textContent = `${num(xag.price, 3)} USD`;
+    $("spotXAU").textContent = num(xau,2) + " USD";
+    $("spotXAG").textContent = num(xag,3) + " USD";
+    $("gsr").textContent = num(gsr,2);
 
-    $("spotXAU_SGD").textContent = `${num(xau.price * rate, 2)} SGD`;
-    $("spotXAG_SGD").textContent = `${num(xag.price * rate, 3)} SGD`;
+    const fx = data?.fx?.rate;
+    $("fx").textContent = fx ? ("1 USD = " + num(fx,4) + " SGD") : "—";
+    $("spotSrc").textContent = data?.spot?.source || "—";
 
-    $("spotSrc").textContent = `${xau.source} + ${fx.source}`;
-    setState("OK: spot/FX обновлены", "status-ok");
-  } catch(e){
+    if(fx){
+      $("spotXAUsgd").textContent = num(xau*fx,2) + " SGD";
+      $("spotXAGsgd").textContent = num(xag*fx,3) + " SGD";
+    } else {
+      $("spotXAUsgd").textContent = "—";
+      $("spotXAGsgd").textContent = "—";
+    }
+
+    setState("OK: spot/fx обновлены", "status-ok");
+  }catch(e){
     console.error(e);
-    $("spotSrc").textContent = "ошибка (см. console)";
-    setState("Spot/FX ошибка: " + e.message, "status-bad");
-  } finally {
-    $("spotBtn").disabled = false;
+    setState("Spot/Fx ошибка: " + e.message, "status-bad");
   }
 }
 
-/** ===== Klines (Kraken через Worker) ===== **/
-async function fetchKlinesKraken(pair, days=30, limit=200){
-  const interval = 60; // 1h
+// --------------------
+// Klines (Kraken)
+// --------------------
+async function fetchKlinesKraken(pair, days=30, interval=60, limit=200){
   const url =
     `${API_BASE}/api/klines?market=kraken` +
     `&pair=${encodeURIComponent(pair)}` +
@@ -255,14 +255,22 @@ async function fetchKlinesKraken(pair, days=30, limit=200){
     `&interval=${encodeURIComponent(interval)}` +
     `&limit=${encodeURIComponent(limit)}`;
 
-  const { j } = await fetchJSON(url);
-  if (!Array.isArray(j) || j.length===0 || !Array.isArray(j[0])) {
+  const r = await fetch(url, { cache:"no-store" });
+  const ct = (r.headers.get("content-type") || "");
+  if(!ct.includes("application/json")){
+    const raw = await r.text();
+    throw new Error("Bad klines (not JSON): " + raw.slice(0,160));
+  }
+  const data = await r.json();
+  if(!Array.isArray(data) || data.length===0 || !Array.isArray(data[0])){
     throw new Error("Bad klines payload");
   }
-  return j; // [[ts,o,h,l,c],...]
+  return data; // [[ts,o,h,l,c],...]
 }
 
-/** ===== Indicators ===== **/
+// --------------------
+// Indicators
+// --------------------
 function SMA(values, period){
   const out = Array(values.length).fill(null);
   let sum = 0;
@@ -310,8 +318,9 @@ function ATR(ohlc, period){
   return out;
 }
 
-/** ===== Chart ===== **/
-function drawChart(canvas, candles, maF, maS){
+// --------------------
+// Chart (canvas)
+—function drawChart(canvas, candles, maF, maS){
   const ctx = canvas.getContext("2d");
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0,0,w,h);
@@ -358,29 +367,28 @@ function drawChart(canvas, candles, maF, maS){
   ctx.fillText(num(min,2), 8, padT+plotH);
 }
 
-/** ===== Main ===== **/
+// --------------------
+// Main Load
+// --------------------
 async function loadAll(){
-  $("loadBtn").disabled = true;
-  setOverlay(true);
+  setState("Загружаю klines (Kraken)…", "status-warn");
+
+  const pair = $("asset").value; // PAXGUSD / XAUTUSD
+  const days = Number($("days").value);
+  const limit = Number($("limit").value);
+  const interval = Number($("interval").value);
+
+  const maFast = Math.max(2, Number($("maFast").value||9));
+  const maSlow = Math.max(maFast+1, Number($("maSlow").value||21));
+  const rsiP = Math.max(2, Number($("rsiP").value||14));
+  const atrP = Math.max(2, Number($("atrP").value||14));
+  const buyRSI = Number($("buyRSI").value||55);
+  const sellRSI = Number($("sellRSI").value||65);
+  const stopX = Number($("stopX").value||2);
+  const tpX = Number($("tpX").value||3);
 
   try{
-    setState("Загружаю klines через Worker (Kraken)…", "status-warn");
-    $("rows").innerHTML = `<tr><td colspan="6" class="small">загрузка…</td></tr>`;
-
-    const pair = $("asset").value;           // XAUTUSD | PAXGUSD
-    const days = Number($("days").value);
-    const limit = Number($("limit").value);
-
-    const maFast = Math.max(2, Number($("maFast").value||9));
-    const maSlow = Math.max(maFast+1, Number($("maSlow").value||21));
-    const rsiP = Math.max(2, Number($("rsiP").value||14));
-    const atrP = Math.max(2, Number($("atrP").value||14));
-    const buyRSI = Number($("buyRSI").value||55);
-    const sellRSI = Number($("sellRSI").value||65);
-    const stopX = Number($("stopX").value||2);
-    const tpX = Number($("tpX").value||3);
-
-    const ohlc = await fetchKlinesKraken(pair, days, limit);
+    const ohlc = await fetchKlinesKraken(pair, days, interval, limit);
 
     const closes = ohlc.map(x=>x[4]);
     const maF = SMA(closes, maFast);
@@ -393,56 +401,33 @@ async function loadAll(){
     $("last").textContent = num(lastClose,2) + " USD";
     $("ts").textContent = new Date().toLocaleString();
 
-    let signal = "NEUTRAL";
     const prev = lastIdx-1;
-
     const crossUp = prev>=0 && maF[prev]!=null && maS[prev]!=null && maF[lastIdx]!=null && maS[lastIdx]!=null
       && (maF[prev] <= maS[prev]) && (maF[lastIdx] > maS[lastIdx]);
-
     const crossDn = prev>=0 && maF[prev]!=null && maS[prev]!=null && maF[lastIdx]!=null && maS[lastIdx]!=null
       && (maF[prev] >= maS[prev]) && (maF[lastIdx] < maS[lastIdx]);
 
     const rsiLast = rsi[lastIdx];
     const atrLast = atr[lastIdx];
 
-    let stop = null, tp = null;
-
+    let signal = "NEUTRAL", stop=null, tp=null;
     if(crossUp && rsiLast!=null && rsiLast < buyRSI){
-      signal = "BUY";
-      if(atrLast!=null){ stop = lastClose - atrLast*stopX; tp = lastClose + atrLast*tpX; }
+      signal="BUY";
+      if(atrLast!=null){ stop=lastClose-atrLast*stopX; tp=lastClose+atrLast*tpX; }
     } else if(crossDn && rsiLast!=null && rsiLast > sellRSI){
-      signal = "SELL";
-      if(atrLast!=null){ stop = lastClose + atrLast*stopX; tp = lastClose - atrLast*tpX; }
+      signal="SELL";
+      if(atrLast!=null){ stop=lastClose+atrLast*stopX; tp=lastClose-atrLast*tpX; }
     }
 
     $("signal").textContent =
       `Сигнал: ${signal} · Close=${num(lastClose,2)} · RSI=${num(rsiLast,1)} · Stop≈${num(stop,2)} · TP≈${num(tp,2)} (ATR=${num(atrLast,2)})`;
 
-    const rows = [];
-    for(let i=Math.max(0,lastIdx-11); i<=lastIdx; i++){
-      rows.push(`
-        <tr>
-          <td>${tsToStr(ohlc[i][0])}</td>
-          <td>${num(closes[i],2)}</td>
-          <td>${num(maF[i],2)}</td>
-          <td>${num(maS[i],2)}</td>
-          <td>${num(rsi[i],1)}</td>
-          <td>${num(atr[i],2)}</td>
-        </tr>
-      `);
-    }
-    $("rows").innerHTML = rows.join("");
-
     drawChart($("chart"), ohlc, maF, maS);
-    setState("OK: klines загружены (Kraken через Worker)", "status-ok");
+    setState("OK: klines получены (Kraken)", "status-ok");
   }catch(e){
     console.error(e);
-    setState("Ошибка загрузки: " + e.message, "status-bad");
+    setState("Ошибка klines: " + e.message, "status-bad");
     $("signal").textContent = "—";
-    $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
-  } finally {
-    setOverlay(false);
-    $("loadBtn").disabled = false;
   }
 }
 
@@ -450,19 +435,84 @@ function resetUI(){
   $("ts").textContent = "—";
   $("last").textContent = "—";
   $("signal").textContent = "—";
-  $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
   const ctx = $("chart").getContext("2d");
   ctx.clearRect(0,0,$("chart").width,$("chart").height);
   setState("Сброшено", "");
 }
 
+// --------------------
+// Trades PnL (FIFO) + localStorage
+// --------------------
+const LS_KEY = "metals_trades_v1";
+function loadTrades(){
+  try{ return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); }catch(_){ return []; }
+}
+function saveTrades(t){ localStorage.setItem(LS_KEY, JSON.stringify(t)); }
+
+function renderTrades(){
+  const trades = loadTrades();
+  if(!trades.length){
+    $("tradesBody").innerHTML = `<tr><td colspan="4" class="small">—</td></tr>`;
+    $("posLeft").textContent = "—";
+    $("pnl").textContent = "—";
+    return;
+  }
+  $("tradesBody").innerHTML = trades.map((t,i)=>`
+    <tr><td>${i+1}</td><td>${t.side}</td><td>${Number(t.price).toFixed(4)}</td><td>${Number(t.qty).toFixed(4)}</td></tr>
+  `).join("");
+
+  // FIFO calc
+  const lots = [];
+  let realized = 0;
+  for(const t of trades){
+    const p = Number(t.price), q = Number(t.qty);
+    if(t.side==="BUY"){
+      lots.push({price:p, qty:q});
+    } else {
+      let sellQty = q;
+      while(sellQty>1e-12 && lots.length){
+        const lot = lots[0];
+        const used = Math.min(lot.qty, sellQty);
+        realized += (p - lot.price) * used;
+        lot.qty -= used;
+        sellQty -= used;
+        if(lot.qty<=1e-12) lots.shift();
+      }
+    }
+  }
+  const left = lots.reduce((a,b)=>a+b.qty,0);
+  $("posLeft").textContent = left.toFixed(4);
+  $("pnl").textContent = realized.toFixed(2) + " USD";
+}
+
+$("addTrade").addEventListener("click", ()=>{
+  const side = $("side").value;
+  const price = Number($("tPrice").value);
+  const qty = Number($("tQty").value);
+  if(!Number.isFinite(price) || !Number.isFinite(qty) || qty<=0) return;
+
+  const trades = loadTrades();
+  trades.push({side, price, qty});
+  saveTrades(trades);
+  $("tPrice").value = "";
+  $("tQty").value = "";
+  renderTrades();
+});
+
+$("clearTrades").addEventListener("click", ()=>{
+  saveTrades([]);
+  renderTrades();
+});
+
+// --------------------
 $("loadBtn").addEventListener("click", loadAll);
 $("resetBtn").addEventListener("click", resetUI);
-$("spotBtn").addEventListener("click", refreshSpot);
+$("spotBtn").addEventListener("click", refreshSummary);
 
+// старт
 resetUI();
-refreshSpot();
-loadAll(); // автозагрузка
+refreshSummary();
+renderTrades();
 </script>
 </body>
 </html>
