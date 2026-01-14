@@ -32,38 +32,30 @@
       background:var(--btn); color:#fff; border:1px solid var(--line);
       border-radius:12px; padding:10px 12px; cursor:pointer
     }
+    button[disabled]{opacity:.55;cursor:not-allowed}
     button:hover{filter:brightness(1.08)}
-    button:disabled{opacity:.55; cursor:not-allowed}
     .small{font-size:12px;color:var(--muted)}
     .kpi{font-variant-numeric:tabular-nums}
     .box{background:rgba(0,0,0,.15); border:1px solid var(--line); border-radius:14px; padding:12px}
     .status-ok{color:var(--ok)} .status-bad{color:var(--bad)} .status-warn{color:var(--warn)}
+    #chartWrap{position:relative}
     #chart{width:100%; height:420px; border-radius:14px; background:rgba(0,0,0,.18);
       border:1px solid var(--line); display:block}
+    #overlay{
+      position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.28); border-radius:14px; font-size:13px; color:var(--muted);
+    }
     table{width:100%;border-collapse:collapse;font-size:12px}
     th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}
     th{color:#c7d2f0;font-weight:600}
-
-    /* мягкая “загрузка” без очистки графика */
-    .overlay{
-      position:absolute; inset:0;
-      display:none;
-      align-items:center; justify-content:center;
-      border-radius:14px;
-      background:rgba(0,0,0,.22);
-      backdrop-filter: blur(2px);
-      font-size:13px; color:var(--muted);
-    }
-    .chartWrap{position:relative}
-    .overlay.show{display:flex}
   </style>
 </head>
 <body>
 <div class="wrap">
   <h1 class="title">Металлы/токены — график + сигналы (MA/RSI/ATR)</h1>
   <p class="sub">
-    Свечи (klines) берём через твой Cloudflare Worker <b>/api/klines</b> (Kraken стабильно).
-    Spot XAUUSD/XAGUSD — через <b>/api/spot</b>. Если что-то не грузится — смотри блок “Состояние”.
+    Свечи берём через твой Worker <b>/api/klines (Kraken)</b>, spot XAU/XAG через <b>/api/spot</b>.
+    SGD считается через <b>/api/fx USD→SGD</b>.
   </p>
 
   <div class="grid">
@@ -74,8 +66,8 @@
           <div>
             <label>Актив (график)</label>
             <select id="asset">
-              <option value="pax-gold">PAXG (Pax Gold)</option>
-              <option value="tether-gold">XAUt (Tether Gold)</option>
+              <option value="XAUTUSD">XAUt (Kraken: XAUTUSD)</option>
+              <option value="PAXGUSD" selected>PAXG (Kraken: PAXGUSD)</option>
             </select>
           </div>
           <div>
@@ -94,6 +86,7 @@
               <option value="100">100</option>
               <option value="200" selected>200</option>
               <option value="365">365</option>
+              <option value="700">700</option>
             </select>
           </div>
         </div>
@@ -108,9 +101,9 @@
         <div class="small">Последняя цена (из свечей): <span id="last" class="kpi">—</span></div>
       </div>
 
-      <div class="chartWrap">
+      <div id="chartWrap">
         <canvas id="chart" width="1200" height="420"></canvas>
-        <div id="overlay" class="overlay">Загрузка…</div>
+        <div id="overlay">Загрузка данных…</div>
       </div>
 
       <p class="small" style="margin:10px 0 0">
@@ -125,8 +118,15 @@
         <div class="row space">
           <div>
             <div style="font-weight:700">Spot (через Worker)</div>
-            <div class="small">XAUUSD: <span id="spotXAU" class="kpi">—</span> · XAGUSD: <span id="spotXAG" class="kpi">—</span></div>
-            <div class="small">Источник: <span id="spotSrc">—</span></div>
+            <div class="small">
+              XAUUSD: <span id="spotXAU" class="kpi">—</span> · XAGUSD: <span id="spotXAG" class="kpi">—</span>
+            </div>
+            <div class="small">
+              XAU SGD: <span id="spotXAU_SGD" class="kpi">—</span> · XAG SGD: <span id="spotXAG_SGD" class="kpi">—</span>
+            </div>
+            <div class="small">
+              FX USD→SGD: <span id="fxUSDSGD" class="kpi">—</span> · Источник: <span id="spotSrc">—</span>
+            </div>
           </div>
           <button id="spotBtn">Обновить spot</button>
         </div>
@@ -178,88 +178,88 @@
 /** ===== Helpers ===== **/
 const $ = (id)=>document.getElementById(id);
 const num = (v, d=2)=> (v==null || !isFinite(v)) ? "—" : Number(v).toFixed(d);
-
 function setState(msg, cls=""){
   const el = $("state");
   el.className = "small " + cls;
   el.textContent = msg;
 }
 function tsToStr(ms){ return new Date(ms).toLocaleString(); }
-function setOverlay(on, text="Загрузка…"){
-  const ov = $("overlay");
-  ov.textContent = text;
-  ov.classList.toggle("show", !!on);
+function setOverlay(on){
+  $("overlay").style.display = on ? "flex" : "none";
 }
 
-// fetch с таймаутом (чтоб не “висло”)
-async function fetchWithTimeout(url, ms=8000){
-  const ctrl = new AbortController();
-  const t = setTimeout(()=>ctrl.abort(), ms);
-  try{
-    return await fetch(url, { cache:"no-store", signal: ctrl.signal });
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-/** ===== API base ===== **/
+/** ===== API base (твоя рабочая ссылка) ===== **/
 const API_BASE = "https://api-metals.analysisswim.workers.dev";
 
-/** ===== Spot ===== **/
-async function fetchSpot(symbol){
-  const r = await fetchWithTimeout(`${API_BASE}/api/spot?symbol=${encodeURIComponent(symbol)}`, 8000);
+/** ===== Spot + FX ===== **/
+async function fetchJSON(url){
+  const r = await fetch(url, { cache: "no-store" });
   const ct = (r.headers.get("content-type") || "");
   if (!ct.includes("application/json")) {
     const raw = await r.text();
-    throw new Error("Spot not JSON: " + raw.slice(0,120));
+    throw new Error("Not JSON: " + raw.slice(0,160));
   }
-  const data = await r.json();
-  if (data?.price == null) throw new Error("Spot missing price");
-  return data;
+  const j = await r.json();
+  return { r, j };
 }
 
-let isSpotLoading = false;
+async function fetchSpot(symbol){
+  const { j } = await fetchJSON(`${API_BASE}/api/spot?symbol=${encodeURIComponent(symbol)}`);
+  if (!j?.ok || j.price == null) throw new Error("Spot bad payload");
+  return j; // {ok,symbol,price,currency,ts,source}
+}
+
+async function fetchFX(from="USD", to="SGD"){
+  const { j } = await fetchJSON(`${API_BASE}/api/fx?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+  if (!j?.ok || j.rate == null) throw new Error("FX bad payload");
+  return j; // {ok,from,to,rate,date,source}
+}
+
 async function refreshSpot(){
-  if (isSpotLoading) return;
-  isSpotLoading = true;
   $("spotBtn").disabled = true;
   try{
-    const [xau,xag] = await Promise.all([fetchSpot("XAUUSD"), fetchSpot("XAGUSD")]);
-    $("spotXAU").textContent = num(xau.price, 2) + " USD";
-    $("spotXAG").textContent = num(xag.price, 3) + " USD";
-    $("spotSrc").textContent = xau.source || "—";
-  }catch(e){
-    $("spotSrc").textContent = "ошибка";
-    setState("Spot ошибка: " + e.message, "status-bad");
+    setState("Обновляю spot + FX…", "status-warn");
+    const [xau, xag, fx] = await Promise.all([
+      fetchSpot("XAUUSD"),
+      fetchSpot("XAGUSD"),
+      fetchFX("USD","SGD"),
+    ]);
+
+    const rate = Number(fx.rate);
+    $("fxUSDSGD").textContent = `${num(rate,4)}`;
+
+    $("spotXAU").textContent = `${num(xau.price, 2)} USD`;
+    $("spotXAG").textContent = `${num(xag.price, 3)} USD`;
+
+    $("spotXAU_SGD").textContent = `${num(xau.price * rate, 2)} SGD`;
+    $("spotXAG_SGD").textContent = `${num(xag.price * rate, 3)} SGD`;
+
+    $("spotSrc").textContent = `${xau.source} + ${fx.source}`;
+    setState("OK: spot/FX обновлены", "status-ok");
+  } catch(e){
     console.error(e);
-  }finally{
+    $("spotSrc").textContent = "ошибка (см. console)";
+    setState("Spot/FX ошибка: " + e.message, "status-bad");
+  } finally {
     $("spotBtn").disabled = false;
-    isSpotLoading = false;
   }
 }
 
-/** ===== Klines (через Worker) ===== **/
-async function fetchKlines(asset, days=30, limit=200){
-  // ты уже используешь Kraken внутри Worker — это самый стабильный путь
-  const pair = (asset === "tether-gold") ? "XAUTUSD" : "PAXGUSD";
+/** ===== Klines (Kraken через Worker) ===== **/
+async function fetchKlinesKraken(pair, days=30, limit=200){
+  const interval = 60; // 1h
   const url =
     `${API_BASE}/api/klines?market=kraken` +
     `&pair=${encodeURIComponent(pair)}` +
     `&days=${encodeURIComponent(days)}` +
-    `&interval=60` +
+    `&interval=${encodeURIComponent(interval)}` +
     `&limit=${encodeURIComponent(limit)}`;
 
-  const r = await fetchWithTimeout(url, 12000);
-  const ct = (r.headers.get("content-type") || "");
-  if(!ct.includes("application/json")){
-    const raw = await r.text();
-    throw new Error("Bad klines (not JSON): " + raw.slice(0,160));
-  }
-  const data = await r.json();
-  if(!Array.isArray(data) || data.length===0 || !Array.isArray(data[0])){
+  const { j } = await fetchJSON(url);
+  if (!Array.isArray(j) || j.length===0 || !Array.isArray(j[0])) {
     throw new Error("Bad klines payload");
   }
-  return data; // [[ts,o,h,l,c],...]
+  return j; // [[ts,o,h,l,c],...]
 }
 
 /** ===== Indicators ===== **/
@@ -275,8 +275,6 @@ function SMA(values, period){
 }
 function RSI(closes, period){
   const out = Array(closes.length).fill(null);
-  if(closes.length <= period) return out;
-
   let gains=0, losses=0;
   for(let i=1;i<=period;i++){
     const diff = closes[i]-closes[i-1];
@@ -296,8 +294,6 @@ function RSI(closes, period){
 }
 function ATR(ohlc, period){
   const out = Array(ohlc.length).fill(null);
-  if(ohlc.length === 0) return out;
-
   const tr = Array(ohlc.length).fill(null);
   for(let i=0;i<ohlc.length;i++){
     const [, ,h,l,] = ohlc[i];
@@ -336,14 +332,12 @@ function drawChart(canvas, candles, maF, maS){
   }
   ctx.globalAlpha=1;
 
-  // price
   ctx.strokeStyle="rgba(255,255,255,.85)";
   ctx.lineWidth=1.2;
   ctx.beginPath();
   closes.forEach((c,i)=>{ const xx=x(i), yy=y(c); if(i===0) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
-  // ma fast
   ctx.strokeStyle="rgba(59,214,113,.9)";
   ctx.lineWidth=1.5;
   ctx.beginPath();
@@ -351,7 +345,6 @@ function drawChart(canvas, candles, maF, maS){
   maF.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!startedF){ctx.moveTo(xx,yy); startedF=true;} else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
-  // ma slow
   ctx.strokeStyle="rgba(255,107,107,.9)";
   ctx.lineWidth=1.5;
   ctx.beginPath();
@@ -359,41 +352,35 @@ function drawChart(canvas, candles, maF, maS){
   maS.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!startedS){ctx.moveTo(xx,yy); startedS=true;} else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
-  // labels
   ctx.fillStyle="rgba(168,179,207,1)";
   ctx.font="12px system-ui";
   ctx.fillText(num(max,2), 8, padT+10);
   ctx.fillText(num(min,2), 8, padT+plotH);
 }
 
-/** ===== Main flow ===== **/
-let isLoading = false;
-
+/** ===== Main ===== **/
 async function loadAll(){
-  if (isLoading) return;
-  isLoading = true;
-
   $("loadBtn").disabled = true;
-  $("resetBtn").disabled = true;
-  $("loadBtn").textContent = "Загрузка…";
-  setOverlay(true, "Загрузка данных…");
-  setState("Загружаю klines через Worker…", "status-warn");
-
-  const asset = $("asset").value;
-  const days = Number($("days").value);
-  const limit = Number($("limit").value);
-
-  const maFast = Math.max(2, Number($("maFast").value||9));
-  const maSlow = Math.max(maFast+1, Number($("maSlow").value||21));
-  const rsiP = Math.max(2, Number($("rsiP").value||14));
-  const atrP = Math.max(2, Number($("atrP").value||14));
-  const buyRSI = Number($("buyRSI").value||55);
-  const sellRSI = Number($("sellRSI").value||65);
-  const stopX = Number($("stopX").value||2);
-  const tpX = Number($("tpX").value||3);
+  setOverlay(true);
 
   try{
-    const ohlc = await fetchKlines(asset, days, limit);
+    setState("Загружаю klines через Worker (Kraken)…", "status-warn");
+    $("rows").innerHTML = `<tr><td colspan="6" class="small">загрузка…</td></tr>`;
+
+    const pair = $("asset").value;           // XAUTUSD | PAXGUSD
+    const days = Number($("days").value);
+    const limit = Number($("limit").value);
+
+    const maFast = Math.max(2, Number($("maFast").value||9));
+    const maSlow = Math.max(maFast+1, Number($("maSlow").value||21));
+    const rsiP = Math.max(2, Number($("rsiP").value||14));
+    const atrP = Math.max(2, Number($("atrP").value||14));
+    const buyRSI = Number($("buyRSI").value||55);
+    const sellRSI = Number($("sellRSI").value||65);
+    const stopX = Number($("stopX").value||2);
+    const tpX = Number($("tpX").value||3);
+
+    const ohlc = await fetchKlinesKraken(pair, days, limit);
 
     const closes = ohlc.map(x=>x[4]);
     const maF = SMA(closes, maFast);
@@ -403,7 +390,6 @@ async function loadAll(){
 
     const lastIdx = ohlc.length-1;
     const lastClose = closes[lastIdx];
-
     $("last").textContent = num(lastClose,2) + " USD";
     $("ts").textContent = new Date().toLocaleString();
 
@@ -432,7 +418,6 @@ async function loadAll(){
     $("signal").textContent =
       `Сигнал: ${signal} · Close=${num(lastClose,2)} · RSI=${num(rsiLast,1)} · Stop≈${num(stop,2)} · TP≈${num(tp,2)} (ATR=${num(atrLast,2)})`;
 
-    // таблица (последние 12)
     const rows = [];
     for(let i=Math.max(0,lastIdx-11); i<=lastIdx; i++){
       rows.push(`
@@ -449,17 +434,15 @@ async function loadAll(){
     $("rows").innerHTML = rows.join("");
 
     drawChart($("chart"), ohlc, maF, maS);
-    setState("OK: klines загружены через Worker (Kraken)", "status-ok");
+    setState("OK: klines загружены (Kraken через Worker)", "status-ok");
   }catch(e){
     console.error(e);
     setState("Ошибка загрузки: " + e.message, "status-bad");
-    // Важно: ничего не очищаем — старые данные остаются на экране
-  }finally{
+    $("signal").textContent = "—";
+    $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
+  } finally {
     setOverlay(false);
     $("loadBtn").disabled = false;
-    $("resetBtn").disabled = false;
-    $("loadBtn").textContent = "Загрузить";
-    isLoading = false;
   }
 }
 
@@ -477,9 +460,9 @@ $("loadBtn").addEventListener("click", loadAll);
 $("resetBtn").addEventListener("click", resetUI);
 $("spotBtn").addEventListener("click", refreshSpot);
 
-// старт
 resetUI();
 refreshSpot();
+loadAll(); // автозагрузка
 </script>
 </body>
 </html>
