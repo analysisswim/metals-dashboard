@@ -3,35 +3,31 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Металлы — график + сигналы + Spot USD/SGD</title>
+  <title>Металлы/токены — график + сигналы (MA/RSI/ATR)</title>
   <style>
     :root{
       --bg:#0b1220; --text:#e7eefc; --muted:#a8b3cf;
       --line:rgba(255,255,255,.08); --btn:#1b2540;
       --ok:#3bd671; --bad:#ff6b6b; --warn:#ffd166;
-      --card:rgba(255,255,255,.03);
     }
     html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
-    .wrap{max-width:1220px;margin:18px auto;padding:0 14px}
+    .wrap{max-width:1250px;margin:18px auto;padding:0 14px}
     .title{font-size:18px;margin:0 0 6px}
     .sub{color:var(--muted);font-size:13px;margin:0 0 14px;line-height:1.35}
-    .grid{display:grid;grid-template-columns: 1.35fr .85fr; gap:14px}
+    .grid{display:grid;grid-template-columns: 1.45fr .85fr; gap:14px}
     @media(max-width:980px){.grid{grid-template-columns:1fr}}
-    .card{
-      background:linear-gradient(180deg, var(--card), rgba(255,255,255,.01));
-      border:1px solid var(--line); border-radius:16px; padding:14px;
-      box-shadow:0 12px 40px rgba(0,0,0,.35)
-    }
+    .card{background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow:0 12px 40px rgba(0,0,0,.35)}
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     .row.space{justify-content:space-between}
     label{font-size:12px;color:var(--muted);display:block;margin:0 0 6px}
     select,input{
       background:rgba(255,255,255,.03); color:var(--text);
       border:1px solid var(--line); border-radius:10px; padding:10px 10px;
-      outline:none; min-width:160px
+      outline:none; min-width:150px
     }
-    input{min-width:120px}
+    input{min-width:110px}
     button{
       background:var(--btn); color:#fff; border:1px solid var(--line);
       border-radius:12px; padding:10px 12px; cursor:pointer
@@ -41,21 +37,16 @@
     .kpi{font-variant-numeric:tabular-nums}
     .box{background:rgba(0,0,0,.15); border:1px solid var(--line); border-radius:14px; padding:12px}
     .status-ok{color:var(--ok)} .status-bad{color:var(--bad)} .status-warn{color:var(--warn)}
-    .pill{display:inline-block;padding:3px 10px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--muted)}
-    .chartWrap{position:relative}
-    #chart{
-      width:100%; height:420px; border-radius:14px; background:rgba(0,0,0,.18);
-      border:1px solid var(--line); display:block
-    }
+    #chartWrap{position:relative}
+    #chart{width:100%; height:440px; border-radius:14px; background:rgba(0,0,0,.18);
+      border:1px solid var(--line); display:block}
     #tip{
       position:absolute; pointer-events:none; display:none;
-      background:rgba(10,16,28,.92); border:1px solid rgba(255,255,255,.10);
-      color:var(--text); padding:8px 10px; border-radius:10px;
-      font-size:12px; box-shadow:0 10px 30px rgba(0,0,0,.4);
-      transform: translate(12px, -12px);
-      max-width: 240px;
-      z-index: 10;
-      white-space: nowrap;
+      background:rgba(10,16,28,.92); border:1px solid rgba(255,255,255,.12);
+      border-radius:10px; padding:8px 10px; font-size:12px; color:#e7eefc;
+      box-shadow:0 10px 30px rgba(0,0,0,.45);
+      transform:translate(10px,10px);
+      max-width:240px;
     }
     table{width:100%;border-collapse:collapse;font-size:12px}
     th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}
@@ -64,10 +55,11 @@
 </head>
 <body>
 <div class="wrap">
-  <h1 class="title">Металлы — график + сигналы (MA/RSI/ATR) + Spot USD/SGD</h1>
+  <h1 class="title">Металлы/токены — график + сигналы (MA/RSI/ATR)</h1>
   <p class="sub">
-    Свечи берём через твой Worker <b>/api/klines</b> (Kraken). Spot XAU/XAG + SGD + GSR берём через <b>/api/summary</b>.
-    Наведи мышью на график — увидишь цену и время.
+    Свечи берём через твой Cloudflare Worker <b>/api/klines</b> (Kraken auto-resolve пары).
+    Spot XAUUSD/XAGUSD — через <b>/api/spot</b>. USD→SGD — через <b>/api/fx</b>.
+    Если что-то не грузится — смотри блок “Состояние”.
   </p>
 
   <div class="grid">
@@ -78,37 +70,36 @@
           <div>
             <label>Актив (график)</label>
             <select id="asset">
-              <option value="PAXGUSD">PAXGUSD (Pax Gold)</option>
-              <option value="XAUTUSD">XAUTUSD (Tether Gold)</option>
               <option value="XAUUSD">XAUUSD (Gold spot)</option>
               <option value="XAGUSD">XAGUSD (Silver spot)</option>
+              <option value="PAXGUSD">PAXGUSD (PAXG on Kraken, если доступно)</option>
+              <option value="XAUTUSD">XAUTUSD (XAUt on Kraken, если доступно)</option>
             </select>
           </div>
           <div>
-            <label>Days</label>
+            <label>Таймфрейм (days)</label>
             <select id="days">
-              <option value="7">7</option>
-              <option value="30" selected>30</option>
-              <option value="90">90</option>
-              <option value="180">180</option>
+              <option value="7">7 дней</option>
+              <option value="30" selected>30 дней</option>
+              <option value="90">90 дней</option>
+              <option value="180">180 дней</option>
+              <option value="365">365 дней</option>
             </select>
           </div>
           <div>
-            <label>Interval (мин)</label>
+            <label>Интервал (мин)</label>
             <select id="interval">
-              <option value="15">15</option>
-              <option value="60" selected>60</option>
-              <option value="240">240</option>
-              <option value="1440">1440 (1D)</option>
+              <option value="60" selected>60m</option>
+              <option value="240">4h</option>
+              <option value="1440">1D</option>
             </select>
           </div>
           <div>
-            <label>Limit</label>
+            <label>Глубина (баров)</label>
             <select id="limit">
               <option value="100">100</option>
               <option value="200" selected>200</option>
-              <option value="365">365</option>
-              <option value="720">720</option>
+              <option value="500">500</option>
             </select>
           </div>
         </div>
@@ -120,11 +111,11 @@
 
       <div class="row space" style="margin:10px 0 8px">
         <div class="small">Обновлено: <span id="ts">—</span></div>
-        <div class="small">Последняя цена: <span id="last" class="kpi">—</span></div>
+        <div class="small">Последняя цена (из свечей): <span id="last" class="kpi">—</span></div>
       </div>
 
-      <div class="chartWrap">
-        <canvas id="chart" width="1200" height="420"></canvas>
+      <div id="chartWrap">
+        <canvas id="chart" width="1300" height="440"></canvas>
         <div id="tip"></div>
       </div>
 
@@ -132,7 +123,6 @@
         BUY: MAfast пересекает MAslow вверх и RSI &lt; buyRSI. SELL: пересечение вниз и RSI &gt; sellRSI.
         Stop/TP = ATR × множители.
       </p>
-      <div class="small" style="margin-top:6px">Hover: <span id="hoverInfo">—</span></div>
     </div>
 
     <!-- RIGHT -->
@@ -140,20 +130,18 @@
       <div class="box" style="margin-bottom:12px">
         <div class="row space">
           <div>
-            <div style="font-weight:700">Spot (XAU / XAG) + SGD + GSR</div>
+            <div style="font-weight:700">Spot (через Worker)</div>
             <div class="small">
               XAUUSD: <span id="spotXAU" class="kpi">—</span>
-              <span class="pill" id="spotXAUsgd">—</span>
+              · XAGUSD: <span id="spotXAG" class="kpi">—</span>
             </div>
             <div class="small">
-              XAGUSD: <span id="spotXAG" class="kpi">—</span>
-              <span class="pill" id="spotXAGsgd">—</span>
+              SGD (по FX): XAU ≈ <span id="spotXAUsgd" class="kpi">—</span>
+              · XAG ≈ <span id="spotXAGsgd" class="kpi">—</span>
             </div>
-            <div class="small">GSR (Gold/Silver): <span id="gsr" class="kpi">—</span></div>
-            <div class="small">FX USD→SGD: <span id="fx" class="kpi">—</span></div>
-            <div class="small">Источник: <span id="spotSrc">—</span></div>
+            <div class="small">FX: <span id="fx" class="kpi">—</span> · Источник spot: <span id="spotSrc">—</span></div>
           </div>
-          <button id="spotBtn">Обновить</button>
+          <button id="spotBtn">Обновить spot</button>
         </div>
       </div>
 
@@ -174,7 +162,7 @@
       <div class="box" style="margin-bottom:12px">
         <div class="row space">
           <div style="font-weight:700">Сигнал</div>
-          <div class="small">—</div>
+          <div class="small">R/R: <span id="rr">—</span></div>
         </div>
         <div id="signal" class="kpi" style="margin-top:8px">—</div>
       </div>
@@ -195,6 +183,17 @@
         <div style="font-weight:700;margin-bottom:6px">Состояние</div>
         <div id="state" class="small">—</div>
       </div>
+
+      <div class="box" style="margin-top:12px">
+        <div style="font-weight:700;margin-bottom:6px">Что чаще двигает золото</div>
+        <div class="small">
+          • Реальные ставки/доходности: рост доходностей часто давит на золото.<br>
+          • Доллар (DXY): сильный доллар часто давит на золото.<br>
+          • Риск/геополитика: спрос на “убежище” толкает вверх.<br>
+          • Инфляционные ожидания: поддерживают золото при страхе обесценения денег.<br>
+          • Потоки ETF/физический спрос: могут усиливать тренды.
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -202,6 +201,7 @@
 <script>
 const $ = (id)=>document.getElementById(id);
 const num = (v, d=2)=> (v==null || !isFinite(v)) ? "—" : Number(v).toFixed(d);
+
 function setState(msg, cls=""){
   const el = $("state");
   el.className = "small " + cls;
@@ -209,82 +209,82 @@ function setState(msg, cls=""){
 }
 function tsToStr(ms){ return new Date(ms).toLocaleString(); }
 
-// ====== твой Worker домен ======
+// ==== твой API Worker домен ====
 const API_BASE = "https://api-metals.analysisswim.workers.dev";
 
-// --------------------
-// Spot + SGD + GSR
-// --------------------
-async function refreshSummary(){
-  setState("Обновляю spot/SGD…", "status-warn");
-  try{
-    const r = await fetch(`${API_BASE}/api/summary?to=SGD`, { cache:"no-store" });
-    const ct = (r.headers.get("content-type")||"");
-    if(!ct.includes("application/json")) throw new Error("summary not JSON");
-    const data = await r.json();
-    if(!data.ok) throw new Error(data.error || "summary error");
+let LAST_CANDLES = null;
+let LAST_MAF = null;
+let LAST_MAS = null;
 
-    const xau = data?.spot?.XAUUSD;
-    const xag = data?.spot?.XAGUSD;
-    const gsr = data?.spot?.GSR;
-    const fx = data?.fx?.rate;
-
-    $("spotXAU").textContent = num(xau,2) + " USD";
-    $("spotXAG").textContent = num(xag,3) + " USD";
-    $("gsr").textContent = num(gsr,2);
-
-    $("fx").textContent = fx ? ("1 USD = " + num(fx,4) + " SGD") : "—";
-    $("spotSrc").textContent = data?.spot?.source || "—";
-
-    if(fx){
-      $("spotXAUsgd").textContent = num(xau*fx,2) + " SGD";
-      $("spotXAGsgd").textContent = num(xag*fx,3) + " SGD";
-    } else {
-      $("spotXAUsgd").textContent = "—";
-      $("spotXAGsgd").textContent = "—";
-    }
-
-    setState("OK: spot/SGD обновлены", "status-ok");
-  }catch(e){
-    console.error(e);
-    setState("Spot/SGD ошибка: " + e.message, "status-bad");
-  }
-}
-
-// --------------------
-// Klines (Kraken через Worker)
-// --------------------async function fetchKlines(pair, days=30, interval=60, limit=200){
-  const url =
-    `${API_BASE}/api/klines?market=kraken` +
-    `&pair=${encodeURIComponent(pair)}` +
-    `&days=${encodeURIComponent(days)}` +
-    `&interval=${encodeURIComponent(interval)}` +
-    `&limit=${encodeURIComponent(limit)}`;
-
+// ===== Spot + FX =====
+async function fetchJSON(url){
   const r = await fetch(url, { cache:"no-store" });
   const ct = (r.headers.get("content-type") || "");
   if(!ct.includes("application/json")){
     const raw = await r.text();
-    throw new Error("Klines not JSON: " + raw.slice(0,160));
+    throw new Error("Not JSON: " + raw.slice(0,160));
   }
+  return r.json();
+}
 
-  const data = await r.json();
+async function refreshSpot(){
+  $("spotXAU").textContent = "—";
+  $("spotXAG").textContent = "—";
+  $("spotXAUsgd").textContent = "—";
+  $("spotXAGsgd").textContent = "—";
+  $("spotSrc").textContent = "—";
+  $("fx").textContent = "—";
 
-  // ✅ если Worker вернул ошибку объектом — покажем её нормально
+  try{
+    const [xau, xag, fx] = await Promise.all([
+      fetchJSON(`${API_BASE}/api/spot?symbol=XAUUSD`),
+      fetchJSON(`${API_BASE}/api/spot?symbol=XAGUSD`),
+      fetchJSON(`${API_BASE}/api/fx?base=USD&quote=SGD`),
+    ]);
+
+    if(xau?.ok===false) throw new Error("Spot XAU: " + (xau.error||""));
+    if(xag?.ok===false) throw new Error("Spot XAG: " + (xag.error||""));
+    if(fx?.ok===false) throw new Error("FX: " + (fx.error||""));
+
+    $("spotXAU").textContent = num(xau.price, 2) + " USD";
+    $("spotXAG").textContent = num(xag.price, 3) + " USD";
+
+    const rate = Number(fx.rate);
+    $("fx").textContent = `1 USD = ${num(rate, 4)} SGD`;
+
+    $("spotXAUsgd").textContent = num(xau.price * rate, 2) + " SGD";
+    $("spotXAGsgd").textContent = num(xag.price * rate, 3) + " SGD";
+
+    $("spotSrc").textContent = xau.source || "—";
+  }catch(e){
+    console.error(e);
+    setState("Spot/FX ошибка: " + e.message, "status-bad");
+    $("spotSrc").textContent = "ошибка";
+  }
+}
+
+// ===== Klines через Worker (Kraken auto-resolve) =====
+async function fetchKlines(symbol, days=30, interval=60, limit=200){
+  const url =
+    `${API_BASE}/api/klines?symbol=${encodeURIComponent(symbol)}` +
+    `&days=${encodeURIComponent(days)}` +
+    `&interval=${encodeURIComponent(interval)}` +
+    `&limit=${encodeURIComponent(limit)}`;
+
+  const data = await fetchJSON(url);
+
+  // Если вдруг Worker вернул объект-ошибку:
   if (data && typeof data === "object" && !Array.isArray(data) && data.ok === false) {
-    throw new Error(`Klines error: ${data.error || "unknown"} ${data.hint ? " | " + String(data.hint).slice(0,120) : ""}`);
+    throw new Error((data.error || "Klines error") + (data.hint ? " | " + String(data.hint).slice(0,140) : ""));
   }
 
   if(!Array.isArray(data) || data.length===0 || !Array.isArray(data[0])){
     throw new Error("Bad klines payload");
   }
-
-  return data;
+  return data; // [[ts,o,h,l,c],...]
 }
 
-// --------------------
-// Indicators
-// --------------------
+// ===== Indicators =====
 function SMA(values, period){
   const out = Array(values.length).fill(null);
   let sum = 0;
@@ -332,17 +332,13 @@ function ATR(ohlc, period){
   return out;
 }
 
-// --------------------
-// Chart + Hover tooltip
-// --------------------
-let __chartState = null;
-
+// ===== Chart + tooltip =====
 function drawChart(canvas, candles, maF, maS){
   const ctx = canvas.getContext("2d");
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0,0,w,h);
 
-  const padL=50, padR=20, padT=18, padB=28;
+  const padL=55, padR=20, padT=18, padB=28;
   const plotW = w-padL-padR, plotH=h-padT-padB;
 
   const closes = candles.map(x=>x[4]);
@@ -350,10 +346,6 @@ function drawChart(canvas, candles, maF, maS){
   const y = (v)=> padT + (max-v)/(max-min||1)*plotH;
   const x = (i)=> padL + (i/(candles.length-1||1))*plotW;
 
-  // save for hover
-  __chartState = { candles, maF, maS, padL, padR, padT, padB, plotW, plotH, min, max, x, y, w, h };
-
-  // grid
   ctx.globalAlpha=0.5;
   ctx.strokeStyle="rgba(255,255,255,.08)";
   for(let i=0;i<=4;i++){
@@ -373,63 +365,80 @@ function drawChart(canvas, candles, maF, maS){
   ctx.strokeStyle="rgba(59,214,113,.9)";
   ctx.lineWidth=1.5;
   ctx.beginPath();
-  let sf=false;
-  maF.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!sf){ctx.moveTo(xx,yy); sf=true;} else ctx.lineTo(xx,yy); });
+  let startedF=false;
+  maF.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!startedF){ctx.moveTo(xx,yy); startedF=true;} else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
   // MA slow
   ctx.strokeStyle="rgba(255,107,107,.9)";
   ctx.lineWidth=1.5;
   ctx.beginPath();
-  let ss=false;
-  maS.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!ss){ctx.moveTo(xx,yy); ss=true;} else ctx.lineTo(xx,yy); });
+  let startedS=false;
+  maS.forEach((v,i)=>{ if(v==null) return; const xx=x(i), yy=y(v); if(!startedS){ctx.moveTo(xx,yy); startedS=true;} else ctx.lineTo(xx,yy); });
   ctx.stroke();
 
   // labels
   ctx.fillStyle="rgba(168,179,207,1)";
   ctx.font="12px system-ui";
-  ctx.fillText(num(max,2), 8, padT+10);
-  ctx.fillText(num(min,2), 8, padT+plotH);
+  ctx.fillText(num(max,2), 10, padT+10);
+  ctx.fillText(num(min,2), 10, padT+plotH);
+
+  // store for tooltip
+  LAST_CANDLES = candles;
+  LAST_MAF = maF;
+  LAST_MAS = maS;
 }
 
-function drawHoverLine(canvas, idx){
-  if(!__chartState) return;
-  const ctx = canvas.getContext("2d");
-  const { x, padT, plotH, candles } = __chartState;
+function bindTooltip(){
+  const canvas = $("chart");
+  const tip = $("tip");
 
-  // redraw base (cheap way: just redraw full chart)
-  // (вместо сложного слоя — так проще и стабильно)
-  const { candles: c, maF, maS } = __chartState;
-  drawChart(canvas, c, maF, maS);
+  canvas.addEventListener("mouseleave", ()=>{
+    tip.style.display = "none";
+  });
 
-  const xx = x(idx);
-  ctx.strokeStyle="rgba(255,255,255,.18)";
-  ctx.lineWidth=1;
-  ctx.beginPath();
-  ctx.moveTo(xx, padT);
-  ctx.lineTo(xx, padT + plotH);
-  ctx.stroke();
+  canvas.addEventListener("mousemove", (ev)=>{
+    if(!LAST_CANDLES || LAST_CANDLES.length<2) return;
 
-  // dot on close
-  const close = candles[idx][4];
-  const yy = __chartState.y(close);
-  ctx.fillStyle="rgba(255,255,255,.85)";
-  ctx.beginPath();
-  ctx.arc(xx, yy, 3.5, 0, Math.PI*2);
-  ctx.fill();
+    const rect = canvas.getBoundingClientRect();
+    const mx = ev.clientX - rect.left;
+    const my = ev.clientY - rect.top;
+
+    // map mouse to nearest index
+    const w = canvas.width;
+    const padL=55, padR=20;
+    const plotW = w-padL-padR;
+
+    const nx = Math.min(1, Math.max(0, (mx - padL) / (plotW || 1)));
+    const idx = Math.round(nx * (LAST_CANDLES.length - 1));
+
+    const c = LAST_CANDLES[idx];
+    if(!c) return;
+
+    const [ts,o,h,l,cl] = c;
+    const maf = LAST_MAF?.[idx];
+    const mas = LAST_MAS?.[idx];
+
+    tip.innerHTML =
+      `<div><b>${new Date(ts).toLocaleString()}</b></div>` +
+      `<div>O: ${num(o,2)} H: ${num(h,2)} L: ${num(l,2)} C: <b>${num(cl,2)}</b></div>` +
+      `<div class="small">MAf: ${num(maf,2)} · MAs: ${num(mas,2)}</div>`;
+
+    tip.style.display = "block";
+    tip.style.left = Math.max(0, Math.min(rect.width - 10, mx)) + "px";
+    tip.style.top  = Math.max(0, Math.min(rect.height - 10, my)) + "px";
+  });
 }
 
-// --------------------
-// Main
-// --------------------
+// ===== Main =====
 async function loadAll(){
-  setState("Загружаю klines…", "status-warn");
+  setState("Загружаю klines через Worker (Kraken)…", "status-warn");
   $("rows").innerHTML = `<tr><td colspan="6" class="small">загрузка…</td></tr>`;
 
-  const pair = $("asset").value;
+  const symbol = $("asset").value;
   const days = Number($("days").value);
-  const limit = Number($("limit").value);
   const interval = Number($("interval").value);
+  const limit = Number($("limit").value);
 
   const maFast = Math.max(2, Number($("maFast").value||9));
   const maSlow = Math.max(maFast+1, Number($("maSlow").value||21));
@@ -441,7 +450,7 @@ async function loadAll(){
   const tpX = Number($("tpX").value||3);
 
   try{
-    const ohlc = await fetchKlines(pair, days, interval, limit);
+    const ohlc = await fetchKlines(symbol, days, interval, limit);
 
     const closes = ohlc.map(x=>x[4]);
     const maF = SMA(closes, maFast);
@@ -454,30 +463,41 @@ async function loadAll(){
     $("last").textContent = num(lastClose,2) + " USD";
     $("ts").textContent = new Date().toLocaleString();
 
-    // signal
     let signal = "NEUTRAL";
     const prev = lastIdx-1;
+
     const crossUp = prev>=0 && maF[prev]!=null && maS[prev]!=null && maF[lastIdx]!=null && maS[lastIdx]!=null
       && (maF[prev] <= maS[prev]) && (maF[lastIdx] > maS[lastIdx]);
+
     const crossDn = prev>=0 && maF[prev]!=null && maS[prev]!=null && maF[lastIdx]!=null && maS[lastIdx]!=null
       && (maF[prev] >= maS[prev]) && (maF[lastIdx] < maS[lastIdx]);
 
     const rsiLast = rsi[lastIdx];
     const atrLast = atr[lastIdx];
-    let stop=null, tp=null;
+
+    let stop = null, tp = null, rr = null;
 
     if(crossUp && rsiLast!=null && rsiLast < buyRSI){
-      signal="BUY";
-      if(atrLast!=null){ stop = lastClose - atrLast*stopX; tp = lastClose + atrLast*tpX; }
+      signal = "BUY";
+      if(atrLast!=null){
+        stop = lastClose - atrLast*stopX;
+        tp   = lastClose + atrLast*tpX;
+        rr   = (tp-lastClose) / (lastClose-stop);
+      }
     } else if(crossDn && rsiLast!=null && rsiLast > sellRSI){
-      signal="SELL";
-      if(atrLast!=null){ stop = lastClose + atrLast*stopX; tp = lastClose - atrLast*tpX; }
+      signal = "SELL";
+      if(atrLast!=null){
+        stop = lastClose + atrLast*stopX;
+        tp   = lastClose - atrLast*tpX;
+        rr   = (lastClose-tp) / (stop-lastClose);
+      }
     }
 
-    $("signal").textContent =
-      `Сигнал: ${signal} · Close=${num(lastClose,2)} · RSI=${num(rsiLast,1)} · Stop≈${num(stop,2)} · TP≈${num(tp,2)} (ATR=${num(atrLast,2)})`;
+    $("rr").textContent = rr==null ? "—" : num(rr,2);
 
-    // table last 12
+    $("signal").textContent =
+      `Сигнал: ${signal} · ${symbol} · Close=${num(lastClose,2)} · RSI=${num(rsiLast,1)} · Stop≈${num(stop,2)} · TP≈${num(tp,2)} (ATR=${num(atrLast,2)})`;
+
     const rows = [];
     for(let i=Math.max(0,lastIdx-11); i<=lastIdx; i++){
       rows.push(`
@@ -494,12 +514,12 @@ async function loadAll(){
     $("rows").innerHTML = rows.join("");
 
     drawChart($("chart"), ohlc, maF, maS);
-    $("hoverInfo").textContent = "Наведи курсор на график";
-    setState("OK: klines загружены", "status-ok");
+    setState("OK: klines загружены через Worker (Kraken auto-pair)", "status-ok");
   }catch(e){
     console.error(e);
     setState("Ошибка загрузки: " + e.message, "status-bad");
     $("signal").textContent = "—";
+    $("rr").textContent = "—";
     $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
   }
 }
@@ -508,61 +528,22 @@ function resetUI(){
   $("ts").textContent = "—";
   $("last").textContent = "—";
   $("signal").textContent = "—";
+  $("rr").textContent = "—";
   $("rows").innerHTML = `<tr><td colspan="6" class="small">—</td></tr>`;
-  $("hoverInfo").textContent = "—";
   const ctx = $("chart").getContext("2d");
   ctx.clearRect(0,0,$("chart").width,$("chart").height);
-  __chartState = null;
   setState("Сброшено", "");
+  $("tip").style.display = "none";
+  LAST_CANDLES = null; LAST_MAF = null; LAST_MAS = null;
 }
 
-// hover handlers
-(function initHover(){
-  const canvas = $("chart");
-  const tip = $("tip");
-
-  canvas.addEventListener("mousemove", (e)=>{
-    if(!__chartState) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
-
-    const { padL, plotW, candles } = __chartState;
-    const n = candles.length;
-    const t = (mx - padL) / (plotW || 1);
-    const idx = Math.max(0, Math.min(n-1, Math.round(t*(n-1))));
-
-    const [ts, o,h,l,c] = candles[idx];
-
-    drawHoverLine(canvas, idx);
-
-    const html = `${new Date(ts).toLocaleString()} · Close=${num(c,2)}`;
-    $("hoverInfo").textContent = html;
-
-    tip.style.display = "block";
-    tip.textContent = html;
-    tip.style.left = (e.clientX - rect.left) + "px";
-    tip.style.top  = (e.clientY - rect.top) + "px";
-  });
-
-  canvas.addEventListener("mouseleave", ()=>{
-    tip.style.display = "none";
-    if(__chartState){
-      const { candles, maF, maS } = __chartState;
-      drawChart(canvas, candles, maF, maS);
-    }
-    $("hoverInfo").textContent = "—";
-  });
-})();
-
-// buttons
 $("loadBtn").addEventListener("click", loadAll);
 $("resetBtn").addEventListener("click", resetUI);
-$("spotBtn").addEventListener("click", refreshSummary);
+$("spotBtn").addEventListener("click", refreshSpot);
 
-// старт
+bindTooltip();
 resetUI();
-refreshSummary();
+refreshSpot();
 </script>
 </body>
 </html>
