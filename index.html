@@ -253,8 +253,7 @@ async function refreshSummary(){
 
 // --------------------
 // Klines (Kraken через Worker)
-// --------------------
-async function fetchKlines(pair, days=30, interval=60, limit=200){
+// --------------------async function fetchKlines(pair, days=30, interval=60, limit=200){
   const url =
     `${API_BASE}/api/klines?market=kraken` +
     `&pair=${encodeURIComponent(pair)}` +
@@ -266,13 +265,21 @@ async function fetchKlines(pair, days=30, interval=60, limit=200){
   const ct = (r.headers.get("content-type") || "");
   if(!ct.includes("application/json")){
     const raw = await r.text();
-    throw new Error("Bad klines (not JSON): " + raw.slice(0,160));
+    throw new Error("Klines not JSON: " + raw.slice(0,160));
   }
+
   const data = await r.json();
+
+  // ✅ если Worker вернул ошибку объектом — покажем её нормально
+  if (data && typeof data === "object" && !Array.isArray(data) && data.ok === false) {
+    throw new Error(`Klines error: ${data.error || "unknown"} ${data.hint ? " | " + String(data.hint).slice(0,120) : ""}`);
+  }
+
   if(!Array.isArray(data) || data.length===0 || !Array.isArray(data[0])){
     throw new Error("Bad klines payload");
   }
-  return data; // [[ts,o,h,l,c],...]
+
+  return data;
 }
 
 // --------------------
